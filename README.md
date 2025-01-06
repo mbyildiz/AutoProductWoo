@@ -1,48 +1,56 @@
-# ProductPush
+# HepsiBurada API
 
-## Proje Açıklaması
-ProductPush, çeşitli e-ticaret sitelerinden ürünleri otomatik olarak toplayan ve WordPress WooCommerce mağazanıza aktaran güçlü bir araçtır. 
-
-### Temel Özellikler
-- 🔄 Otomatik ürün toplama (Web Scraping)
-- 📦 WooCommerce'e otomatik ürün ekleme
-- 🎯 Çoklu site desteği
-- ⚡ Hızlı ve otomatik senkronizasyon
-- 🎨 Kullanıcı dostu admin paneli
-- 📊 Detaylı raporlama sistemi
-
-### Kullanım Alanları
-- E-ticaret sitesi sahipleri
-- Dropshipping yapan işletmeler
-- Toplu ürün yönetimi yapanlar
-- Ürün fiyat takibi yapanlar
-
-## Proje Gereksinimleri
-
-## Mimari
-- MVVM mimarisi
-- Core ve Features yapısı
-
-## Backend
-- PHP
-- Supabase veritabanı
-- Admin paneli
-- Web scraper fonksiyon litesi
-- Farklı farklı siteleri Scraper yapacagım için Backend ve DB yi buna göre ayarla. Site URL, Resim URL, Ürün Adı, Ürün Fiyatı, Ürün Stok, Ürün Detayı gibi bilgileri alacagım.
-- RESTful API
-- WordPress WooCommerce API entegrasyonu
-- WordPress e ürünler ekleme
-- WordPress Api ile ürünler ekelme
-- WordPress Api ile ürünler listeleme
-- Test de gerek yok
-
-## Frontend
-- React, TypeScript, TailwindCSS
-- Admin panel
-- Test de gerek yok
+Bu PHP kütüphanesi, HepsiBurada'dan ürün bilgilerini çekmek için kullanılır.
 
 ## Özellikler
-- Scraper ile toplanan ürünlerin WordPress'e otomatik aktarımı
-- Supabase tablo yapıları SupabaseSQL.txt ye yazılacak
-- Supabase tablo yapılarının otomatik oluşturulması
+
+- Ürün arama
+- Fiyat bilgisi çekme (normal ve sepet fiyatı)
+- Ürün resmi, başlık ve marka bilgisi
+- Sayfalama desteği
+
+## Kurulum
+
+1. Dosyaları projenize ekleyin
+2. `HepsiBuradaAPI` sınıfını kullanmaya başlayın
+
+## Kullanım
+
+```php
+$api = new HepsiBuradaAPI();
+$results = $api->search('bosch', 1); // İlk sayfadaki Bosch ürünlerini getirir
+echo json_encode($results, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+```
+
+## Dönen Veri Formatı
+
+```json
+{
+    "success": true,
+    "page": 1,
+    "search_term": "bosch",
+    "products": [
+        {
+            "id": "PRODUCT_ID",
+            "title": "Ürün Başlığı",
+            "price": "100.50",
+            "image": "https://productimages.hepsiburada.net/...",
+            "url": "https://www.hepsiburada.com/...",
+            "brand": "Bosch",
+            "category": ""
+        }
+    ],
+    "total": 1
+}
+```
+
+## Gereksinimler
+
+- PHP 7.0 veya üzeri
+- cURL extension
+- JSON extension
+
+## Lisans
+
+MIT
 

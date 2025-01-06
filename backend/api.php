@@ -2,6 +2,7 @@
 require_once 'config.php';
 require_once 'WooCommerceAPI.php';
 require_once 'SupabaseDB.php';
+require_once 'HepsiBurada.php';
 
 // Debug için hata raporlamayı açalım
 error_reporting(E_ALL);
@@ -39,6 +40,7 @@ try {
     
     $woocommerce = new WooCommerceAPI();
     $supabase = new SupabaseDB();
+    $hepsiburada = new HepsiBuradaAPI();
 
     // İstek metodunu al
     $method = $_SERVER['REQUEST_METHOD'];
@@ -96,6 +98,60 @@ try {
         sendResponse([
             'supabase_products' => $supabaseProducts,
             'wordpress_products' => $wpProducts
+        ]);
+    }
+
+    // GET /hepsiburada/search - HepsiBurada'da ürün arama
+    if ($method === 'GET' && strpos($path, 'hepsiburada/search') === 0) {
+        $search_term = isset($_GET['q']) ? $_GET['q'] : '';
+        $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+        
+        if (empty($search_term)) {
+            http_response_code(400);
+            sendResponse(['error' => 'Arama terimi gerekli']);
+        }
+        
+        $results = $hepsiburada->search($search_term, $page);
+        sendResponse($results);
+    }
+    
+    // POST /hepsiburada/import - HepsiBurada'dan ürünü içe aktar
+    else if ($method === 'POST' && strpos($path, 'hepsiburada/import') === 0) {
+        $data = json_decode(file_get_contents('php://input'), true);
+        
+        if (!isset($data['product'])) {
+            http_response_code(400);
+            sendResponse(['error' => 'Ürün verisi gerekli']);
+        }
+        
+        $product = $data['product'];
+        
+        // Supabase'e kaydet
+        $supabaseResult = $supabase->insertProduct([
+            'name' => $product['title'],
+            'price' => $product['price'],
+            'description' => $product['title'],
+            'image_url' => $product['image'],
+            'source' => 'hepsiburada',
+            'source_id' => $product['id'],
+            'source_url' => $product['url']
+        ]);
+        
+        // WordPress'e ekle
+        $wpResult = $woocommerce->addProduct([
+            'name' => $product['title'],
+            'type' => 'simple',
+            'regular_price' => (string)$product['price'],
+            'description' => $product['title'],
+            'short_description' => $product['title'],
+            'images' => [
+                ['src' => $product['image']]
+            ]
+        ]);
+        
+        sendResponse([
+            'supabase' => $supabaseResult,
+            'wordpress' => $wpResult
         ]);
     }
 
