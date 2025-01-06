@@ -130,6 +130,10 @@ class HepsiBuradaScraper {
             foreach ($matches[0] as $productHtml) {
                 if (preg_match('/href="([^"]+)".*?title="([^"]+)"/', $productHtml, $urlMatch)) {
                     $url = $urlMatch[1];
+                    if (strpos($url, 'adservice.hepsiburada.com') !== false) {
+                        continue;
+                    }
+                    
                     if (strpos($url, 'http') !== 0) {
                         $url = 'https://www.hepsiburada.com' . $url;
                     }
@@ -140,7 +144,9 @@ class HepsiBuradaScraper {
                     
                     $image = '';
                     if (preg_match('/src="([^"]+productimages[^"]+\.jpg)"/', $productHtml, $imageMatch)) {
-                        $image = $imageMatch[1];
+                        if (strpos($imageMatch[1], 'adservice.hepsiburada.com') === false) {
+                            $image = $imageMatch[1];
+                        }
                     }
                     
                     $brand = explode(' ', $title)[0] ?? '';
@@ -182,13 +188,20 @@ class HepsiBuradaAPI {
         try {
             $products = $this->scraper->getProducts($searchTerm, $page);
             
-            return [
+            $response = [
                 'success' => true,
                 'page' => $page,
                 'search_term' => $searchTerm,
-                'products' => $products,
+                'products' => array_map(function($product) {
+                    $product['title'] = $product['title'];
+                    return $product;
+                }, $products),
                 'total' => count($products)
             ];
+
+            // JSON_UNESCAPED_SLASHES ve JSON_UNESCAPED_UNICODE flaglerini ekleyelim
+            return json_decode(json_encode($response, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS), true);
+
         } catch (Exception $e) {
             error_log("HepsiBurada API Error: " . $e->getMessage());
             error_log("Stack trace: " . $e->getTraceAsString());
