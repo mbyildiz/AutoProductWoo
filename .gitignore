@@ -1,1 +1,17 @@
-SupabaseSQL.txt 
+# Debug dosyaları
+debug_*.txt
+debug_*.html
+debug_*.json
+
+# Cookie dosyası
+cookies.txt
+
+# IDE ve sistem dosyaları
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# PHP hata logları
+error_log
+*.log 
