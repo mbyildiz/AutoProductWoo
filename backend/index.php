@@ -1,3 +1,6 @@
+<?php
+session_start();
+?>
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -8,103 +11,16 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
-    <?php
-    require_once 'config.php';
-    require_once 'WooCommerceAPI.php';
-    require_once 'SupabaseDB.php';
-    require_once 'HepsiBurada.php';
-    
-    $woocommerce = new WooCommerceAPI();
-    $supabase = new SupabaseDB();
-    $hepsiburada = new HepsiBuradaAPI();
-    
-    $message = '';
-    $messageType = '';
-    $searchResults = [];
-    
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        if (isset($_POST['action'])) {
-            try {
-                switch ($_POST['action']) {
-                    case 'test_woo':
-                        $result = $woocommerce->getProducts();
-                        $message = 'WooCommerce bağlantısı başarılı! Ürün sayısı: ' . count($result);
-                        $messageType = 'success';
-                        break;
-                    case 'test_supabase':
-                        $result = $supabase->testConnection();
-                        $message = 'Supabase bağlantısı başarılı!';
-                        $messageType = 'success';
-                        break;
-                    case 'sync_products':
-                        $products = $woocommerce->getProducts();
-                        foreach ($products as $product) {
-                            $supabase->insertProduct($product);
-                        }
-                        $message = 'Ürünler başarıyla senkronize edildi!';
-                        $messageType = 'success';
-                        break;
-                    case 'hepsiburada_search':
-                        if (empty($_POST['search_term'])) {
-                            throw new Exception('Arama terimi gerekli!');
-                        }
-                        $page = isset($_POST['page']) ? (int)$_POST['page'] : 1;
-                        $results = $hepsiburada->search($_POST['search_term'], $page);
-                        if ($results['success']) {
-                            $searchResults = $results['products'];
-                            $message = count($searchResults) . ' ürün bulundu.';
-                            $messageType = 'success';
-                        } else {
-                            throw new Exception('Arama başarısız: ' . $results['error']);
-                        }
-                        break;
-                    case 'hepsiburada_import':
-                        if (!isset($_POST['product_data'])) {
-                            throw new Exception('Ürün verisi gerekli!');
-                        }
-                        $productData = json_decode($_POST['product_data'], true);
-                        
-                        // Supabase'e kaydet
-                        $supabaseResult = $supabase->insertProduct([
-                            'name' => $productData['title'],
-                            'price' => $productData['price'],
-                            'description' => $productData['title'],
-                            'image_url' => $productData['image'],
-                            'source' => 'hepsiburada',
-                            'source_id' => $productData['id'],
-                            'source_url' => $productData['url']
-                        ]);
-                        
-                        // WordPress'e ekle
-                        $wpResult = $woocommerce->addProduct([
-                            'name' => $productData['title'],
-                            'type' => 'simple',
-                            'regular_price' => (string)$productData['price'],
-                            'description' => $productData['title'],
-                            'short_description' => $productData['title'],
-                            'images' => [
-                                ['src' => $productData['image']]
-                            ]
-                        ]);
-                        
-                        $message = 'Ürün başarıyla içe aktarıldı!';
-                        $messageType = 'success';
-                        break;
-                }
-            } catch (Exception $e) {
-                $message = 'Hata: ' . $e->getMessage();
-                $messageType = 'danger';
-            }
-        }
-    }
-    ?>
-
     <div class="container py-5">
         <h1 class="text-center mb-5">API Test Paneli</h1>
         
-        <?php if ($message): ?>
-        <div class="alert alert-<?php echo $messageType; ?> alert-dismissible fade show" role="alert">
-            <?php echo $message; ?>
+        <?php if (isset($_SESSION['message'])): ?>
+        <div class="alert alert-<?php echo $_SESSION['message_type']; ?> alert-dismissible fade show" role="alert">
+            <?php 
+            echo $_SESSION['message'];
+            unset($_SESSION['message']);
+            unset($_SESSION['message_type']);
+            ?>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
         <?php endif; ?>
@@ -116,7 +32,7 @@
                     <div class="card-body">
                         <h5 class="card-title"><i class="fab fa-wordpress me-2"></i>WooCommerce Test</h5>
                         <p class="card-text">WooCommerce API bağlantısını test edin.</p>
-                        <form method="POST">
+                        <form action="api.php" method="POST">
                             <input type="hidden" name="action" value="test_woo">
                             <button type="submit" class="btn btn-primary">Test Et</button>
                         </form>
@@ -130,7 +46,7 @@
                     <div class="card-body">
                         <h5 class="card-title"><i class="fas fa-database me-2"></i>Supabase Test</h5>
                         <p class="card-text">Supabase veritabanı bağlantısını test edin.</p>
-                        <form method="POST">
+                        <form action="api.php" method="POST">
                             <input type="hidden" name="action" value="test_supabase">
                             <button type="submit" class="btn btn-primary">Test Et</button>
                         </form>
@@ -144,7 +60,7 @@
                     <div class="card-body">
                         <h5 class="card-title"><i class="fas fa-sync me-2"></i>Ürün Senkronizasyonu</h5>
                         <p class="card-text">WooCommerce ürünlerini Supabase'e aktarın.</p>
-                        <form method="POST">
+                        <form action="api.php" method="POST">
                             <input type="hidden" name="action" value="sync_products">
                             <button type="submit" class="btn btn-success">Senkronize Et</button>
                         </form>
@@ -157,7 +73,7 @@
                 <div class="card">
                     <div class="card-body">
                         <h5 class="card-title"><i class="fas fa-search me-2"></i>HepsiBurada Ürün Arama</h5>
-                        <form method="POST" class="mb-4">
+                        <form action="api.php" method="POST" class="mb-4">
                             <input type="hidden" name="action" value="hepsiburada_search">
                             <div class="row g-3">
                                 <div class="col-md-8">
@@ -172,7 +88,7 @@
                             </div>
                         </form>
 
-                        <?php if (!empty($searchResults)): ?>
+                        <?php if (isset($_SESSION['search_results'])): ?>
                         <div class="table-responsive">
                             <table class="table table-striped">
                                 <thead>
@@ -185,31 +101,121 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($searchResults as $product): ?>
+                                    <?php foreach ($_SESSION['search_results'] as $product): ?>
                                     <tr>
-                                        <td><img src="<?php echo htmlspecialchars($product['image']); ?>" alt="" style="max-width: 50px;"></td>
-                                        <td><?php echo htmlspecialchars($product['title']); ?></td>
-                                        <td><?php echo htmlspecialchars($product['price']); ?></td>
+                                        <td>
+                                            <img src="<?php echo htmlspecialchars($product['image']); ?>" alt="" style="max-width: 50px;">
+                                            <?php if (!empty($product['images'])): ?>
+                                                <div class="mt-2">
+                                                    <?php foreach (array_slice($product['images'], 0, 3) as $img): ?>
+                                                        <img src="<?php echo htmlspecialchars($img); ?>" alt="" style="max-width: 30px; margin-right: 2px;">
+                                                    <?php endforeach; ?>
+                                                    <?php if (count($product['images']) > 3): ?>
+                                                        <small>(+<?php echo count($product['images']) - 3; ?> resim)</small>
+                                                    <?php endif; ?>
+                                                </div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <strong><?php echo htmlspecialchars($product['title']); ?></strong>
+                                            <?php if (!empty($product['description'])): ?>
+                                                <div class="small text-muted mt-1">
+                                                    <?php echo nl2br(htmlspecialchars(substr($product['description'], 0, 200))); ?>
+                                                    <?php if (strlen($product['description']) > 200): ?>...<?php endif; ?>
+                                                </div>
+                                            <?php endif; ?>
+                                            <div class="small">
+                                                <strong>ID:</strong> <?php echo htmlspecialchars($product['id']); ?>
+                                                <br>
+                                                <strong>URL:</strong> <a href="<?php echo htmlspecialchars($product['url']); ?>" target="_blank">Ürünü Gör</a>
+                                                <br>
+                                                <?php echo htmlspecialchars($product['description']); ?>
+                                                <br>
+                                                <?php echo !empty($product['images']) ? htmlspecialchars($product['images'][0]) : 'Description da resim bulunamadı'; ?>
+                                                
+                                            </div>
+                                        </td>
+                                        <td><?php echo htmlspecialchars($product['price']); ?> TL</td>
                                         <td><?php echo htmlspecialchars($product['brand']); ?></td>
                                         <td>
-                                            <form method="POST" style="display: inline;">
+                                            <form action="api.php" method="POST" style="display: inline;">
                                                 <input type="hidden" name="action" value="hepsiburada_import">
                                                 <input type="hidden" name="product_data" value='<?php echo htmlspecialchars(json_encode($product)); ?>'>
                                                 <button type="submit" class="btn btn-sm btn-success">İçe Aktar</button>
                                             </form>
+                                            <button type="button" class="btn btn-sm btn-info mt-1" onclick='showProductDetails(<?php echo json_encode($product); ?>)'>
+                                                Detaylar
+                                            </button>
                                         </td>
                                     </tr>
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
                         </div>
-                        <?php endif; ?>
+                        <?php 
+                        unset($_SESSION['search_results']);
+                        endif; 
+                        ?>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Ürün Detayları Modal -->
+    <div class="modal fade" id="productDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Ürün Detayları</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="productDetails"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    function showProductDetails(product) {
+        const modal = new bootstrap.Modal(document.getElementById('productDetailsModal'));
+        const detailsDiv = document.getElementById('productDetails');
+        
+        let html = `
+            <div class="row">
+                <div class="col-md-4">
+                    <img src="${product.image}" class="img-fluid mb-3" alt="">
+                    ${product.images ? `
+                        <div class="row g-2">
+                            ${product.images.map(img => `
+                                <div class="col-4">
+                                    <img src="${img}" class="img-fluid" alt="">
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+                <div class="col-md-8">
+                    <h4>${product.title}</h4>
+                    <p class="text-muted">${product.brand}</p>
+                    <h5 class="text-primary">${product.price} TL</h5>
+                    ${product.description ? `
+                        <hr>
+                        <h6>Ürün Açıklaması:</h6>
+                        <p>${product.description}</p>
+                    ` : ''}
+                    <hr>
+                    <p><strong>Ürün ID:</strong> ${product.id}</p>
+                    <p><strong>Ürün URL:</strong> <a href="${product.url}" target="_blank">HepsiBurada'da Gör</a></p>
+                </div>
+            </div>
+        `;
+        
+        detailsDiv.innerHTML = html;
+        modal.show();
+    }
+    </script>
 </body>
 </html> 
