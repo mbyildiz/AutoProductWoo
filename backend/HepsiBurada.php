@@ -118,6 +118,41 @@ class HepsiBuradaScraper {
     }
     
     /**
+     * Ürün detay sayfasından detaylı bilgileri çeker
+     * @param string $url
+     * @return array
+     */
+    private function getProductDetailsOrImages($html) {
+        
+        sleep(1); // Rate limiting için kısa bekleme
+
+        // Ürün açıklamasını çek
+        $description = '';
+        if (preg_match('/<div[^>]*id="productDescriptionContent"[^>]*>(.*?)<\/div>/s', $html, $descMatches)) {
+            $description = strip_tags($descMatches[1]);
+            $description = trim(preg_replace('/\s+/', ' ', $description));
+        }
+        else{
+            $description = 'Ürün açıklaması bulunamadı';
+        }
+
+        // Ek resimleri çek
+        $images = [];
+        if (preg_match_all('/"imageUrl":"([^"]*productimages[^"]*\.jpg)"/', $html, $imageMatches)) {
+            $images = array_unique($imageMatches[1]);
+            $images = array_values(array_filter($images, function($url) {
+                return strpos($url, 'adservice.hepsiburada.com') === false;
+            }));
+        }
+       
+
+        return [
+            'description' => $description,
+            'images' => $images
+        ];
+    }
+    
+    /**
      * HTML içeriğinden ürünleri parse eder
      * @param string $html
      * @return array
@@ -153,6 +188,10 @@ class HepsiBuradaScraper {
                     $price = $this->extractPrice($productHtml);
                     
                     if (!empty($title)) {
+                        // Ürün detaylarını çek
+                        $htmDetailsPage = $this->fetchUrl($url);
+                        $images = $this->getProductDetailsOrImages($htmDetailsPage);
+                        
                         $products[] = [
                             'id' => $id,
                             'title' => trim($title),
@@ -160,7 +199,9 @@ class HepsiBuradaScraper {
                             'image' => $image,
                             'url' => $url,
                             'brand' => $brand,
-                            'category' => ''
+                            'category' => '',
+                            'description' => $images['description'],
+                            'images' => $images['images']
                         ];
                     }
                 }

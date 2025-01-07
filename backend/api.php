@@ -1,4 +1,5 @@
 <?php
+session_start();
 require_once 'config.php';
 require_once 'WooCommerceAPI.php';
 require_once 'SupabaseDB.php';
@@ -17,11 +18,9 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization');
 function handleError($e) {
     error_log("Hata oluştu: " . $e->getMessage());
     error_log("Hata yığını: " . $e->getTraceAsString());
-    http_response_code(500);
-    echo json_encode([
-        'error' => $e->getMessage(),
-        'trace' => $e->getTraceAsString()
-    ]);
+    $_SESSION['message'] = 'Hata: ' . $e->getMessage();
+    $_SESSION['message_type'] = 'danger';
+    header('Location: /');
     exit;
 }
 
@@ -60,111 +59,166 @@ try {
         exit;
     }
 
-    // POST /products - Ürün ekleme
-    if ($method === 'POST') {
-        $data = json_decode(file_get_contents('php://input'), true);
-        error_log("POST Data: " . json_encode($data));
-        
-        // Supabase'e kaydet
-        $supabaseResult = $supabase->insertProduct($data);
-        
-        // WordPress'e ekle
-        $wpResult = $woocommerce->addProduct([
-            'name' => $data['name'],
-            'type' => 'simple',
-            'regular_price' => (string)$data['price'],
-            'description' => $data['description'],
-            'short_description' => $data['description'],
-            'images' => [
-                ['src' => $data['image_url']]
-            ],
-            'stock_quantity' => $data['stock']
-        ]);
-        
-        sendResponse([
-            'supabase' => $supabaseResult,
-            'wordpress' => $wpResult
-        ]);
+    // Form işlemleri
+    if ($method === 'POST' && isset($_POST['action'])) {
+        switch ($_POST['action']) {
+            case 'test_woo':
+                $result = $woocommerce->getProducts();
+                $_SESSION['message'] = 'WooCommerce bağlantısı başarılı! Ürün sayısı: ' . count($result);
+                $_SESSION['message_type'] = 'success';
+                header('Location: /');
+                exit;
+
+            case 'test_supabase':
+                $result = $supabase->testConnection();
+                $_SESSION['message'] = 'Supabase bağlantısı başarılı!';
+                $_SESSION['message_type'] = 'success';
+                header('Location: /');
+                exit;
+
+            case 'sync_products':
+                $products = $woocommerce->getProducts();
+                foreach ($products as $product) {
+                    $supabase->insertProduct($product);
+                }
+                $_SESSION['message'] = 'Ürünler başarıyla senkronize edildi!';
+                $_SESSION['message_type'] = 'success';
+                header('Location: /');
+                exit;
+
+            case 'hepsiburada_search':
+                if (empty($_POST['search_term'])) {
+                    $_SESSION['message'] = 'Arama terimi gerekli!';
+                    $_SESSION['message_type'] = 'danger';
+                    header('Location: /');
+                    exit;
+                }
+                $page = isset($_POST['page']) ? (int)$_POST['page'] : 1;
+                $results = $hepsiburada->search($_POST['search_term'], $page);
+                if ($results['success']) {
+                    $_SESSION['search_results'] = $results['products'];
+                    $_SESSION['message'] = count($results['products']) . ' ürün bulundu.';
+                    $_SESSION['message_type'] = 'success';
+                } else {
+                    $_SESSION['message'] = 'Arama başarısız: ' . $results['error'];
+                    $_SESSION['message_type'] = 'danger';
+                }
+                header('Location: /');
+                exit;
+
+            case 'hepsiburada_import':
+                if (!isset($_POST['product_data'])) {
+                    $_SESSION['message'] = 'Ürün verisi gerekli!';
+                    $_SESSION['message_type'] = 'danger';
+                    header('Location: /');
+                    exit;
+                }
+                $productData = json_decode($_POST['product_data'], true);
+                
+                // Supabase'e kaydet
+                $supabaseResult = $supabase->insertProduct([
+                    'name' => $productData['title'],
+                    'price' => $productData['price'],
+                    'description' => $productData['description'] ?? $productData['title'],
+                    'image_url' => $productData['image'],
+                    'source' => 'hepsiburada',
+                    'source_id' => $productData['id'],
+                    'source_url' => $productData['url'],
+                    'images' => $productData['images'] ?? []
+                ]);
+                
+                // WordPress'e ekle
+                $wpResult = $woocommerce->addProduct([
+                    'name' => $productData['title'],
+                    'type' => 'simple',
+                    'regular_price' => (string)$productData['price'],
+                    'description' => $productData['description'] ?? $productData['title'],
+                    'short_description' => substr($productData['description'] ?? $productData['title'], 0, 200),
+                    'images' => array_merge(
+                        [['src' => $productData['image']]],
+                        array_map(function($img) {
+                            return ['src' => $img];
+                        }, $productData['images'] ?? [])
+                    )
+                ]);
+                
+                $_SESSION['message'] = 'Ürün başarıyla içe aktarıldı!';
+                $_SESSION['message_type'] = 'success';
+                header('Location: /');
+                exit;
+        }
     }
 
-    // GET /products - Ürünleri listeleme
-    else if ($method === 'GET') {
-        $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-        $per_page = isset($_GET['per_page']) ? (int)$_GET['per_page'] : 10;
+    // API istekleri
+    if (strpos($path, 'api/') === 0) {
+        $path = substr($path, 4); // "api/" kısmını kaldır
         
-        $supabaseProducts = $supabase->getProducts($page, $per_page);
-        $wpProducts = $woocommerce->getProducts($page, $per_page);
-        
-        sendResponse([
-            'supabase_products' => $supabaseProducts,
-            'wordpress_products' => $wpProducts
-        ]);
-    }
-
-    // GET /hepsiburada/search - HepsiBurada'da ürün arama
-    if ($method === 'GET' && strpos($path, 'hepsiburada/search') === 0) {
-        $search_term = isset($_GET['q']) ? $_GET['q'] : '';
-        $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-        
-        if (empty($search_term)) {
-            http_response_code(400);
-            sendResponse(['error' => 'Arama terimi gerekli']);
+        // GET /products - Ürünleri listeleme
+        if ($method === 'GET' && $path === 'products') {
+            $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+            $per_page = isset($_GET['per_page']) ? (int)$_GET['per_page'] : 10;
+            
+            $supabaseProducts = $supabase->getProducts($page, $per_page);
+            $wpProducts = $woocommerce->getProducts($page, $per_page);
+            
+            sendResponse([
+                'supabase_products' => $supabaseProducts,
+                'wordpress_products' => $wpProducts
+            ]);
         }
         
-        $results = $hepsiburada->search($search_term, $page);
-        sendResponse($results);
-    }
-    
-    // POST /hepsiburada/import - HepsiBurada'dan ürünü içe aktar
-    else if ($method === 'POST' && strpos($path, 'hepsiburada/import') === 0) {
-        $data = json_decode(file_get_contents('php://input'), true);
-        
-        if (!isset($data['product'])) {
-            http_response_code(400);
-            sendResponse(['error' => 'Ürün verisi gerekli']);
+        // GET /hepsiburada/search - HepsiBurada'da ürün arama
+        else if ($method === 'GET' && strpos($path, 'hepsiburada/search') === 0) {
+            $search_term = isset($_GET['q']) ? $_GET['q'] : '';
+            $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+            
+            if (empty($search_term)) {
+                http_response_code(400);
+                sendResponse(['error' => 'Arama terimi gerekli']);
+            }
+            
+            $results = $hepsiburada->search($search_term, $page);
+            sendResponse($results);
         }
         
-        $product = $data['product'];
+        // POST /products - Ürün ekleme
+        else if ($method === 'POST' && $path === 'products') {
+            $data = json_decode(file_get_contents('php://input'), true);
+            error_log("POST Data: " . json_encode($data));
+            
+            // Supabase'e kaydet
+            $supabaseResult = $supabase->insertProduct($data);
+            
+            // WordPress'e ekle
+            $wpResult = $woocommerce->addProduct([
+                'name' => $data['name'],
+                'type' => 'simple',
+                'regular_price' => (string)$data['price'],
+                'description' => $data['description'],
+                'short_description' => $data['description'],
+                'images' => [
+                    ['src' => $data['image_url']]
+                ],
+                'stock_quantity' => $data['stock']
+            ]);
+            
+            sendResponse([
+                'supabase' => $supabaseResult,
+                'wordpress' => $wpResult
+            ]);
+        }
         
-        // Supabase'e kaydet
-        $supabaseResult = $supabase->insertProduct([
-            'name' => $product['title'],
-            'price' => $product['price'],
-            'description' => $product['title'],
-            'image_url' => $product['image'],
-            'source' => 'hepsiburada',
-            'source_id' => $product['id'],
-            'source_url' => $product['url']
-        ]);
-        
-        // WordPress'e ekle
-        $wpResult = $woocommerce->addProduct([
-            'name' => $product['title'],
-            'type' => 'simple',
-            'regular_price' => (string)$product['price'],
-            'description' => $product['title'],
-            'short_description' => $product['title'],
-            'images' => [
-                ['src' => $product['image']]
-            ]
-        ]);
-        
-        sendResponse([
-            'supabase' => $supabaseResult,
-            'wordpress' => $wpResult
-        ]);
-    }
-
-    // 404 - Endpoint bulunamadı
-    else {
-        error_log("404 Error - Method: " . $method . ", Path: " . $path);
-        http_response_code(404);
-        sendResponse([
-            'error' => 'Endpoint bulunamadı',
-            'path' => $path,
-            'method' => $method,
-            'request_uri' => $request_uri
-        ]);
+        // 404 - Endpoint bulunamadı
+        else {
+            error_log("404 Error - Method: " . $method . ", Path: " . $path);
+            http_response_code(404);
+            sendResponse([
+                'error' => 'Endpoint bulunamadı',
+                'path' => $path,
+                'method' => $method,
+                'request_uri' => $request_uri
+            ]);
+        }
     }
 
 } catch (Exception $e) {
