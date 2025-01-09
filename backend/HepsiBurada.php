@@ -210,6 +210,11 @@ class HepsiBuradaScraper {
      */
     protected function sendToCrawlAPI($url) {
         try {
+            if (DEBUG_MODE) {
+                error_log("\n========= CRAWL API İSTEĞİ BAŞLIYOR =========");
+                error_log("URL: " . $url);
+            }
+
             $ch = curl_init('http://localhost:8008/crawl');
             
             $postData = json_encode(['url' => $url]);
@@ -230,14 +235,31 @@ class HepsiBuradaScraper {
             if ($httpCode === 200) {
                 $data = json_decode($response, true);
                 if ($data) {
-                    // URL'den ID'yi çıkar
-                    preg_match('/p-([^?\/]+)/', $url, $matches);
-                    $id = $matches[1] ?? '';
+                    // URL'den ID çıkarma işlemini geliştir
+                    $id = '';
+                    
+                    // pm-XXXXX formatı için kontrol
+                    if (preg_match('/-pm-([A-Za-z0-9]+)/', $url, $matches)) {
+                        $id = $matches[1];
+                    }
+                    // p-XXXXX formatı için kontrol
+                    elseif (preg_match('/p-([A-Za-z0-9]+)/', $url, $matches)) {
+                        $id = $matches[1];
+                    }
+                    // URL'den ID çıkarılamadıysa, başlıktan benzersiz ID oluştur
+                    if (empty($id) && !empty($data['title'])) {
+                        $id = 'HB_' . substr(md5($data['title']), 0, 10);
+                    }
+
+                    if (DEBUG_MODE) {
+                        error_log("Çıkarılan ID: " . $id);
+                        error_log("Başlık: " . ($data['title'] ?? 'Başlık yok'));
+                    }
 
                     // Fiyatı düzenle (sadece sayısal değer)
-                    $price = preg_replace('/[^0-9]/', '', $data['price']);
+                    $price = preg_replace('/[^0-9]/', '', $data['price'] ?? '');
 
-                    return [
+                    $result = [
                         'id' => $id,
                         'url' => $url,
                         'title' => $data['title'] ?? '',
@@ -253,6 +275,13 @@ class HepsiBuradaScraper {
                         ],
                         'description_table' => $data['description_table'] ?? []
                     ];
+
+                    if (DEBUG_MODE) {
+                        error_log("İşlenmiş veri: " . print_r($result, true));
+                        error_log("========= CRAWL API İSTEĞİ TAMAMLANDI =========\n");
+                    }
+
+                    return $result;
                 }
             }
             
