@@ -1,8 +1,12 @@
 <?php
 
 class HepsiBuradaScraper {
-    private $baseUrl = 'https://www.hepsiburada.com/ara';
-    private $cookies = [];
+    protected $baseUrl = 'https://www.hepsiburada.com/ara';
+    protected $cookies = [];
+    
+    public function __construct() {
+        // Base constructor
+    }
     
     /**
      * Belirtilen arama terimi için ürünleri getirir
@@ -29,7 +33,7 @@ class HepsiBuradaScraper {
      * @param string $url
      * @return string
      */
-    private function fetchUrl($url) {
+    protected function fetchUrl($url) {
         $ch = curl_init();
         
         // Temel ayarlar
@@ -169,6 +173,7 @@ class HepsiBuradaScraper {
         preg_match_all('/<a[^>]*class="moria-ProductCard-gyqBb[^"]*".*?<\/a>/s', $html, $matches);
         
         if (!empty($matches[0])) {
+            $productCount = 0;
             foreach ($matches[0] as $productHtml) {
                 if (preg_match('/href="([^"]+)".*?title="([^"]+)"/', $productHtml, $urlMatch)) {
                     $url = $urlMatch[1];
@@ -179,40 +184,17 @@ class HepsiBuradaScraper {
                     if (strpos($url, 'http') !== 0) {
                         $url = 'https://www.hepsiburada.com' . $url;
                     }
-                    $title = $urlMatch[2];
                     
-                    preg_match('/p-([^?\/]+)/', $url, $idMatch);
-                    $id = $idMatch[1] ?? '';
+                    // Crawl API'sine istek gönder
+                    $crawlResponse = $this->sendToCrawlAPI($url);
                     
-                    $image = '';
-                    if (preg_match('/src="([^"]+productimages[^"]+\.jpg)"/', $productHtml, $imageMatch)) {
-                        if (strpos($imageMatch[1], 'adservice.hepsiburada.com') === false) {
-                            $image = $imageMatch[1];
-                        }
-                    }
-                    
-                    $brand = explode(' ', $title)[0] ?? '';
-                    $price = $this->extractPrice($productHtml);
-                    
-                    if (!empty($title)) {
-                        // Ürün detaylarını çek
-                        $htmDetailsPage = $this->fetchUrl($url);
-                        if (count($products) < 5) {
-                            file_put_contents('debug_html_' . $id . '.html', $htmDetailsPage);
-                        }
-                        $images = $this->getProductDetailsOrImages($htmDetailsPage);
+                    if ($crawlResponse) {
+                        $products[] = $crawlResponse;
+                        $productCount++;
                         
-                        $products[] = [
-                            'id' => $id,
-                            'title' => trim($title),
-                            'price' => $price,
-                            'image' => $image,
-                            'url' => $url,
-                            'brand' => $brand,
-                            'category' => '',
-                            'description' => $images['description'],
-                            'images' => $images['images']
-                        ];
+                        if ($productCount >= 10) { // Test için sadece 1 ürün
+                            break;
+                        }
                     }
                 }
             }
@@ -220,37 +202,147 @@ class HepsiBuradaScraper {
         
         return $products;
     }
+    
+    /**
+     * Crawl API'sine istek gönderir
+     * @param string $url
+     * @return array|null
+     */
+    protected function sendToCrawlAPI($url) {
+        try {
+            $ch = curl_init('http://localhost:8008/crawl');
+            
+            $postData = json_encode(['url' => $url]);
+            
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/json',
+                'accept: application/json'
+            ]);
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            
+            curl_close($ch);
+            
+            if ($httpCode === 200) {
+                $data = json_decode($response, true);
+                if ($data) {
+                    // URL'den ID'yi çıkar
+                    preg_match('/p-([^?\/]+)/', $url, $matches);
+                    $id = $matches[1] ?? '';
+
+                    // Fiyatı düzenle (sadece sayısal değer)
+                    $price = preg_replace('/[^0-9]/', '', $data['price']);
+
+                    return [
+                        'id' => $id,
+                        'url' => $url,
+                        'title' => $data['title'] ?? '',
+                        'brand' => $data['brand'] ?? '',
+                        'description' => $data['description'] ?? '',
+                        'image_url' => $data['image_url'] ?? null,
+                        'additional_images' => $data['additional_images'] ?? [],
+                        'img_description' => $data['img_description'] ?? [],
+                        'price' => $price,
+                        'categories' => [
+                            'main_category' => $data['categories']['main_category'] ?? '',
+                            'sub_category' => $data['categories']['sub_category'] ?? ''
+                        ],
+                        'description_table' => $data['description_table'] ?? []
+                    ];
+                }
+            }
+            
+            error_log("API Error for URL $url: HTTP Code $httpCode, Response: $response");
+            return null;
+            
+        } catch (Exception $e) {
+            error_log("Exception while calling Crawl API: " . $e->getMessage());
+            return null;
+        }
+    }
 }
 
-class HepsiBuradaAPI {
-    private $scraper;
+class HepsiBuradaAPI extends HepsiBuradaScraper {
+    private $batchSize = 5; // Her batch'te işlenecek ürün sayısı
+    private $sleepBetweenBatches = 2; // Batch'ler arası bekleme süresi (saniye)
     
     public function __construct() {
-        $this->scraper = new HepsiBuradaScraper();
+        // PHP zaman aşımı limitini artır
+        set_time_limit(1800); // 30 dakika
+        ini_set('max_execution_time', 1800);
+        
+        // Parent constructor'ı çağır
+        parent::__construct();
     }
     
     /**
      * Ürün arama endpoint'i
      * @param string $searchTerm
      * @param int $page
+     * @param int $limit Toplam işlenecek ürün sayısı
      * @return array
      */
-    public function search($searchTerm, $page = 1) {
+    public function search($searchTerm, $page = 1, $limit = 10) {
         try {
-            $products = $this->scraper->getProducts($searchTerm, $page);
+            $allProducts = [];
+            $processedCount = 0;
+            $batchNumber = 1;
+            
+            // HTML'i bir kere al
+            $html = $this->fetchUrl($this->baseUrl . '?q=' . urlencode($searchTerm));
+            preg_match_all('/<a[^>]*class="moria-ProductCard-gyqBb[^"]*".*?<\/a>/s', $html, $matches);
+            
+            if (!empty($matches[0])) {
+                foreach ($matches[0] as $productHtml) {
+                    if ($processedCount >= $limit) {
+                        break;
+                    }
+
+                    if (preg_match('/href="([^"]+)".*?title="([^"]+)"/', $productHtml, $urlMatch)) {
+                        $url = $urlMatch[1];
+                        if (strpos($url, 'adservice.hepsiburada.com') !== false) {
+                            continue;
+                        }
+                        
+                        if (strpos($url, 'http') !== 0) {
+                            $url = 'https://www.hepsiburada.com' . $url;
+                        }
+
+                        // Batch kontrolü
+                        if ($processedCount > 0 && $processedCount % $this->batchSize === 0) {
+                            error_log("Batch #" . $batchNumber . " tamamlandı. " . $processedCount . " ürün işlendi.");
+                            sleep($this->sleepBetweenBatches);
+                            $batchNumber++;
+                        }
+                        
+                        // Crawl API'sine istek gönder
+                        $crawlResponse = $this->sendToCrawlAPI($url);
+                        
+                        if ($crawlResponse) {
+                            $allProducts[] = $crawlResponse;
+                            $processedCount++;
+                            
+                            // İşlem durumunu logla
+                            error_log("Ürün işlendi: " . $processedCount . "/" . $limit);
+                        }
+                    }
+                }
+            }
             
             $response = [
                 'success' => true,
                 'page' => $page,
                 'search_term' => $searchTerm,
-                'products' => array_map(function($product) {
-                    $product['title'] = $product['title'];
-                    return $product;
-                }, $products),
-                'total' => count($products)
+                'products' => $allProducts,
+                'total' => count($allProducts),
+                'processed_count' => $processedCount,
+                'batch_count' => $batchNumber - 1
             ];
 
-            // JSON_UNESCAPED_SLASHES ve JSON_UNESCAPED_UNICODE flaglerini ekleyelim
             return json_decode(json_encode($response, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS), true);
 
         } catch (Exception $e) {
@@ -261,6 +353,22 @@ class HepsiBuradaAPI {
                 'error' => $e->getMessage()
             ];
         }
+    }
+
+    /**
+     * Batch boyutunu ayarla
+     * @param int $size
+     */
+    public function setBatchSize($size) {
+        $this->batchSize = max(1, intval($size));
+    }
+
+    /**
+     * Batch'ler arası bekleme süresini ayarla
+     * @param int $seconds
+     */
+    public function setSleepBetweenBatches($seconds) {
+        $this->sleepBetweenBatches = max(1, intval($seconds));
     }
 }
 
