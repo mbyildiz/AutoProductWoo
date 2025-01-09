@@ -264,6 +264,139 @@ class HepsiBuradaScraper {
             return null;
         }
     }
+
+    public function scrapeProduct($url) {
+        if (DEBUG_MODE) {
+            error_log("Ürün URL'si: " . $url);
+        }
+
+        // Debug için spesifik URL kontrolü
+        $debug_url = 'https://www.hepsiburada.com/tp-cd-18-50-te-cs-18-165-1-te-os-18-150-tc-js-18-akulu-ahsap-seti-pm-HBC00007CEB9Y';
+        $is_debug_url = ($url === $debug_url);
+
+        if ($is_debug_url && DEBUG_MODE) {
+            error_log("Debug URL tespit edildi: " . $url);
+        }
+
+        try {
+            $ch = curl_init();
+            
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+            
+            $response = curl_exec($ch);
+            
+            if ($is_debug_url) {
+                // Debug HTML'i kaydet
+                $debug_file = 'debug-craw.html';
+                file_put_contents($debug_file, $response);
+                error_log("HTML içeriği kaydedildi: " . $debug_file);
+            }
+
+            if (curl_errno($ch)) {
+                throw new Exception('Curl Error: ' . curl_error($ch));
+            }
+
+            $data = $this->parseProductHTML($response);
+
+            if ($is_debug_url) {
+                // Ayrıştırılan veriyi de kaydet
+                $debug_data_file = 'debug-data.json';
+                file_put_contents($debug_data_file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                error_log("Ayrıştırılan veri kaydedildi: " . $debug_data_file);
+            }
+
+            curl_close($ch);
+            return $data;
+
+        } catch (Exception $e) {
+            if (DEBUG_MODE) {
+                error_log("Hata oluştu: " . $e->getMessage());
+            }
+            throw $e;
+        }
+    }
+
+    private function parseProductHTML($html) {
+        if (DEBUG_MODE) {
+            error_log("HTML ayrıştırma başladı");
+        }
+
+        // HTML'i parse et
+        $dom = new DOMDocument();
+        @$dom->loadHTML($html);
+        $xpath = new DOMXPath($dom);
+
+        $data = [];
+
+        try {
+            // Başlık
+            $titleNode = $xpath->query('//h1[@class="product-name"]')->item(0);
+            $data['title'] = $titleNode ? trim($titleNode->nodeValue) : '';
+            
+            if (DEBUG_MODE) {
+                error_log("Başlık: " . $data['title']);
+            }
+
+            // Marka
+            $brandNode = $xpath->query('//span[@class="brand-name"]')->item(0);
+            $data['brand'] = $brandNode ? trim($brandNode->nodeValue) : '';
+            
+            if (DEBUG_MODE) {
+                error_log("Marka: " . $data['brand']);
+            }
+
+            // Resimler
+            $data['image_url'] = '';
+            $data['additional_images'] = [];
+            
+            $imageNodes = $xpath->query('//picture/img[@src]');
+            foreach ($imageNodes as $img) {
+                $imgUrl = $img->getAttribute('src');
+                if (empty($data['image_url'])) {
+                    $data['image_url'] = $imgUrl;
+                } else {
+                    $data['additional_images'][] = $imgUrl;
+                }
+            }
+
+            if (DEBUG_MODE) {
+                error_log("Ana resim: " . $data['image_url']);
+                error_log("Ek resim sayısı: " . count($data['additional_images']));
+            }
+
+            // Özellikler tablosu
+            $data['description_table'] = [];
+            $rows = $xpath->query('//table[@class="data-list tech-spec"]//tr');
+            
+            foreach ($rows as $row) {
+                $key = trim($xpath->query('.//th', $row)->item(0)->nodeValue);
+                $value = trim($xpath->query('.//td', $row)->item(0)->nodeValue);
+                $data['description_table'][$key] = $value;
+            }
+
+            if (DEBUG_MODE) {
+                error_log("Özellik sayısı: " . count($data['description_table']));
+            }
+
+            // Debug için tüm veriyi logla
+            if (DEBUG_MODE) {
+                error_log("Ayrıştırılan veri: " . print_r($data, true));
+            }
+
+            return $data;
+
+        } catch (Exception $e) {
+            if (DEBUG_MODE) {
+                error_log("HTML ayrıştırma hatası: " . $e->getMessage());
+            }
+            throw $e;
+        }
+    }
 }
 
 class HepsiBuradaAPI extends HepsiBuradaScraper {

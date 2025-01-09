@@ -9,6 +9,15 @@ define('WP_CONSUMER_SECRET', 'cs_d2feb6dcc8ef00a1dca205d26c1bfb168fd58c3f');
 define('WP_ADMIN_USER', 'admin'); // WordPress yönetici kullanıcı adınız
 define('WP_APP_PASSWORD', 'rGMN 2SC4 c8bt h0d2 4fe7 lRFz'); // Buraya oluşturduğunuz uygulama şifresini yazın
 
+// Hata ayıklama modu
+define('DEBUG_MODE', true);
+
+// Hata loglama ayarları
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('error_log', 'debug.log');
+ini_set('log_errors', 1);
+
 // CORS ayarları
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
