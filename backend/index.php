@@ -9,6 +9,121 @@ session_start();
     <title>API Test Paneli</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <style>
+        .specs-table {
+            font-size: 0.85rem;
+        }
+        .specs-table td {
+            padding: 0.25rem 0.5rem !important;
+        }
+        .specs-table td:first-child {
+            white-space: nowrap;
+            background-color: #f8f9fa;
+            width: 40%;
+        }
+        .specs-wrapper {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+        .specs-wrapper::-webkit-scrollbar {
+            width: 6px;
+        }
+        .specs-wrapper::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .specs-wrapper::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+        .specs-wrapper::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        /* Resim stilleri */
+        .product-image {
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 2px;
+            background: white;
+        }
+        .additional-images {
+            display: flex;
+            gap: 4px;
+            margin-top: 8px;
+        }
+        .additional-images img {
+            border: 1px solid #dee2e6;
+            border-radius: 3px;
+            transition: transform 0.2s;
+        }
+        .additional-images img:hover {
+            transform: scale(1.1);
+        }
+        .image-count-badge {
+            font-size: 0.7rem;
+            padding: 2px 6px;
+        }
+        .product-images-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+        .image-section {
+            background: white;
+            padding: 8px;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .section-title {
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .main-image {
+            width: 100px;
+            height: 100px;
+            object-fit: contain;
+            background: white;
+            padding: 4px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            display: block;
+            margin: 0 auto;
+        }
+        .additional-images-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+            max-width: 120px;
+            margin: 0 auto;
+        }
+        .additional-image {
+            width: 35px;
+            height: 35px;
+            object-fit: cover;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 2px;
+            background: white;
+            transition: transform 0.2s;
+        }
+        .additional-image:hover {
+            transform: scale(1.5);
+            z-index: 1;
+        }
+        .image-count {
+            grid-column: span 3;
+            text-align: center;
+            font-size: 0.7rem;
+            color: #6c757d;
+            margin-top: 4px;
+        }
+    </style>
 </head>
 <body class="bg-light">
     <div class="container py-5">
@@ -76,76 +191,166 @@ session_start();
                         <form action="api.php" method="POST" class="mb-4">
                             <input type="hidden" name="action" value="hepsiburada_search">
                             <div class="row g-3">
-                                <div class="col-md-8">
+                                <div class="col-md-10">
                                     <input type="text" name="search_term" class="form-control" placeholder="Ürün adı girin..." required>
                                 </div>
                                 <div class="col-md-2">
-                                    <input type="number" name="page" class="form-control" value="1" min="1">
-                                </div>
-                                <div class="col-md-2">
-                                    <button type="submit" class="btn btn-primary w-100">Ara</button>
+                                    <button type="submit" class="btn btn-primary w-100">Ara ve Kaydet</button>
                                 </div>
                             </div>
                         </form>
 
                         <?php if (isset($_SESSION['search_results'])): ?>
+                        <?php if (isset($_SESSION['search_results']['processed_count'])): ?>
+                        <div class="alert alert-info mb-3">
+                            <h6 class="mb-2">İşlem Özeti:</h6>
+                            <div class="small">
+                                <div>Toplam İşlenen Ürün: <?php echo $_SESSION['search_results']['processed_count']; ?></div>
+                                <div>Batch Sayısı: <?php echo $_SESSION['search_results']['batch_count']; ?></div>
+                                <div>Toplam Bulunan Ürün: <?php echo $_SESSION['search_results']['total']; ?></div>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        
                         <div class="table-responsive">
                             <table class="table table-striped">
                                 <thead>
                                     <tr>
-                                        <th>Resim</th>
+                                        <th>Durum</th>
                                         <th>Başlık</th>
-                                        <th>Fiyat</th>
                                         <th>Marka</th>
-                                        <th>İşlem</th>
+                                        <th>Kategori</th>
+                                        <th>Fiyat</th>
+                                        <th>Özellikler</th>
+                                        <th>Resim</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php foreach ($_SESSION['search_results'] as $product): ?>
                                     <tr>
                                         <td>
-                                            <img src="<?php echo htmlspecialchars($product['image']); ?>" alt="" style="max-width: 50px;">
-                                            <?php if (!empty($product['images'])): ?>
-                                                <div class="mt-2">
-                                                    <?php foreach (array_slice($product['images'], 0, 3) as $img): ?>
-                                                        <img src="<?php echo htmlspecialchars($img); ?>" alt="" style="max-width: 30px; margin-right: 2px;">
-                                                    <?php endforeach; ?>
-                                                    <?php if (count($product['images']) > 3): ?>
-                                                        <small>(+<?php echo count($product['images']) - 3; ?> resim)</small>
+                                            <?php if (!empty($product['title'])): ?>
+                                                <i class="fas fa-check text-success"></i>
+                                            <?php else: ?>
+                                                <i class="fas fa-times text-danger"></i>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($product['title'])): ?>
+                                                <?php echo htmlspecialchars($product['title']); ?>
+                                            <?php else: ?>
+                                                <span class="text-danger">Başlık alınamadı</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($product['brand'])): ?>
+                                                <?php echo htmlspecialchars($product['brand']); ?>
+                                            <?php else: ?>
+                                                <span class="text-muted">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($product['categories']['main_category'])): ?>
+                                                <?php echo htmlspecialchars($product['categories']['main_category']); ?>
+                                                <?php if (!empty($product['categories']['sub_category'])): ?>
+                                                    <br>
+                                                    <small class="text-muted"><?php echo htmlspecialchars($product['categories']['sub_category']); ?></small>
+                                                <?php endif; ?>
+                                            <?php else: ?>
+                                                <span class="text-muted">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($product['price'])): ?>
+                                                <?php echo htmlspecialchars($product['price']); ?> TL
+                                            <?php else: ?>
+                                                <span class="text-muted">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($product['description_table'])): ?>
+                                                <div class="specs-wrapper">
+                                                    <table class="table table-sm mb-0 specs-table">
+                                                        <tbody>
+                                                            <?php foreach ($product['description_table'] as $key => $value): ?>
+                                                                <tr>
+                                                                    <td class="fw-bold"><?php echo htmlspecialchars($key); ?></td>
+                                                                    <td><?php echo htmlspecialchars($value); ?></td>
+                                                                </tr>
+                                                            <?php endforeach; ?>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            <?php else: ?>
+                                                <span class="text-muted">-</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($product['image_url'])): ?>
+                                                <div class="product-images-container">
+                                                    <!-- Ana Resim -->
+                                                    <div class="image-section">
+                                                        <div class="section-title">Ana Resim:</div>
+                                                        <img src="<?php echo htmlspecialchars($product['image_url']); ?>" 
+                                                             alt="" 
+                                                             class="main-image"
+                                                             title="Ana Ürün Görseli">
+                                                    </div>
+                                                    
+                                                    <!-- Ek Resimler -->
+                                                    <?php if (!empty($product['additional_images'])): ?>
+                                                        <div class="image-section">
+                                                            <div class="section-title">Ürün Resimleri:</div>
+                                                            <div class="additional-images-container">
+                                                                <?php 
+                                                                $additionalImages = array_slice($product['additional_images'], 0, 3);
+                                                                foreach ($additionalImages as $index => $img): 
+                                                                ?>
+                                                                    <img src="<?php echo htmlspecialchars($img); ?>" 
+                                                                         alt="" 
+                                                                         class="additional-image"
+                                                                         title="Ürün Resmi <?php echo $index + 1; ?>">
+                                                                <?php endforeach; ?>
+                                                                
+                                                                <?php if (count($product['additional_images']) > 3): ?>
+                                                                    <div class="image-count">
+                                                                        +<?php echo count($product['additional_images']) - 3; ?> ürün resmi
+                                                                    </div>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                        </div>
+                                                    <?php endif; ?>
+
+                                                    <!-- Açıklama Resimleri -->
+                                                    <?php if (!empty($product['img_description'])): ?>
+                                                        <div class="image-section">
+                                                            <div class="section-title">Açıklama Resimleri:</div>
+                                                            <div class="additional-images-container">
+                                                                <?php 
+                                                                $descImages = array_slice($product['img_description'], 0, 3);
+                                                                foreach ($descImages as $index => $img): 
+                                                                ?>
+                                                                    <img src="<?php echo htmlspecialchars($img); ?>" 
+                                                                         alt="" 
+                                                                         class="additional-image"
+                                                                         title="Açıklama Resmi <?php echo $index + 1; ?>">
+                                                                <?php endforeach; ?>
+                                                                
+                                                                <?php if (count($product['img_description']) > 3): ?>
+                                                                    <div class="image-count">
+                                                                        +<?php echo count($product['img_description']) - 3; ?> açıklama resmi
+                                                                    </div>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                        </div>
                                                     <?php endif; ?>
                                                 </div>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td>
-                                            <strong><?php echo htmlspecialchars($product['title']); ?></strong>
-                                            <?php if (!empty($product['description'])): ?>
-                                                <div class="small text-muted mt-1">
-                                                    <?php echo nl2br(htmlspecialchars(substr($product['description'], 0, 200))); ?>
-                                                    <?php if (strlen($product['description']) > 200): ?>...<?php endif; ?>
+                                            <?php else: ?>
+                                                <div class="text-center">
+                                                    <i class="fas fa-image text-muted" style="font-size: 2rem;"></i>
+                                                    <div class="small text-muted mt-1">Resim yok</div>
                                                 </div>
                                             <?php endif; ?>
-                                            <div class="small">
-                                                <strong>ID:</strong> <?php echo htmlspecialchars($product['id']); ?>
-                                                <br>
-                                                <strong>URL:</strong> <a href="<?php echo htmlspecialchars($product['url']); ?>" target="_blank">Ürünü Gör</a>
-                                                <br>
-                                                <?php echo htmlspecialchars($product['description']); ?>
-                                                <br>
-                                                <?php echo !empty($product['images']) ? htmlspecialchars($product['images'][0]) : 'Description da resim bulunamadı'; ?>
-                                                
-                                            </div>
-                                        </td>
-                                        <td><?php echo htmlspecialchars($product['price']); ?> TL</td>
-                                        <td><?php echo htmlspecialchars($product['brand']); ?></td>
-                                        <td>
-                                            <form action="api.php" method="POST" style="display: inline;">
-                                                <input type="hidden" name="action" value="hepsiburada_import">
-                                                <input type="hidden" name="product_data" value='<?php echo htmlspecialchars(json_encode($product)); ?>'>
-                                                <button type="submit" class="btn btn-sm btn-success">İçe Aktar</button>
-                                            </form>
-                                            <button type="button" class="btn btn-sm btn-info mt-1" onclick='showProductDetails(<?php echo json_encode($product); ?>)'>
-                                                Detaylar
-                                            </button>
                                         </td>
                                     </tr>
                                     <?php endforeach; ?>
