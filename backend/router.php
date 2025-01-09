@@ -21,4 +21,4 @@ if (empty($path) || $path === 'index.php') {
     require_once 'index.php';
 } else {
     require_once 'api.php';
-} 
+}

@@ -123,28 +123,35 @@ class HepsiBuradaScraper {
      * @return array
      */
     private function getProductDetailsOrImages($html) {
-        
         sleep(1); // Rate limiting için kısa bekleme
 
         // Ürün açıklamasını çek
         $description = '';
-        if (preg_match('/<div[^>]*id="productDescriptionContent"[^>]*>(.*?)<\/div>/s', $html, $descMatches)) {
+        if (preg_match('/<div[^>]*data-test-id="ProductDescription"[^>]*>(.*?)<\/div>/s', $html, $descMatches)) {
             $description = strip_tags($descMatches[1]);
             $description = trim(preg_replace('/\s+/', ' ', $description));
-        }
-        else{
+
+            // Açıklama içindeki resimleri kontrol et
+            preg_match_all('/<img[^>]*src="([^"]*)"[^>]*>/i', $descMatches[1], $descImageMatches);
+            if (!empty($descImageMatches[1])) {
+                foreach ($descImageMatches[1] as $imgUrl) {
+                    if (strpos($imgUrl, 'https://images.hepsiburada.net/description-assets') === 0) {
+                        $images[] = $imgUrl;
+                    }
+                }
+            }
+        } else {
             $description = 'Ürün açıklaması bulunamadı';
         }
 
-        // Ek resimleri çek
+        // Ürün resimlerini çek
         $images = [];
         if (preg_match_all('/"imageUrl":"([^"]*productimages[^"]*\.jpg)"/', $html, $imageMatches)) {
-            $images = array_unique($imageMatches[1]);
+            $images = array_merge($images, array_unique($imageMatches[1]));
             $images = array_values(array_filter($images, function($url) {
                 return strpos($url, 'adservice.hepsiburada.com') === false;
             }));
         }
-       
 
         return [
             'description' => $description,
@@ -190,6 +197,9 @@ class HepsiBuradaScraper {
                     if (!empty($title)) {
                         // Ürün detaylarını çek
                         $htmDetailsPage = $this->fetchUrl($url);
+                        if (count($products) < 5) {
+                            file_put_contents('debug_html_' . $id . '.html', $htmDetailsPage);
+                        }
                         $images = $this->getProductDetailsOrImages($htmDetailsPage);
                         
                         $products[] = [

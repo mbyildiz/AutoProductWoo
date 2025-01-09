@@ -1,0 +1,31 @@
+PHP Projesini Çalıştırma Talimatları
+=====================================
+
+1. Doğru Dizine Git
+------------------
+- Projenin ana dizinine git:
+  cd "C:\Users\mbyil\Desktop\Cursor projeler\Wordpress api ürün ekleme"
+
+2. PHP Sunucusunu Başlat
+-----------------------
+- Backend klasörünü kök dizin yaparak PHP sunucusunu başlat:
+  php -S localhost:3000 -t backend/
+
+3. Tarayıcıda Aç
+---------------
+- Web tarayıcınızı açın
+- Şu adresi ziyaret edin:
+  http://localhost:3000
+
+Önemli Notlar:
+-------------
+1. Sunucu çalışırken terminal penceresini kapatmayın
+2. Sunucuyu durdurmak için Ctrl+C tuşlarını kullanın
+3. Port 3000 kullanılıyorsa, farklı bir port deneyebilirsiniz (örn: 8080, 8000)
+4. pdo_firebird hatası normal, projenin çalışmasını etkilemez
+
+Hata Durumunda:
+--------------
+1. Başka bir uygulama portu kullanıyor olabilir -> Farklı port deneyin
+2. Dizin hataları -> Doğru dizinde olduğunuzdan emin olun
+3. Erişim engeli -> Güvenlik duvarı ayarlarını kontrol edin 
