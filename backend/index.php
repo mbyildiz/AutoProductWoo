@@ -46,6 +46,67 @@ session_start();
 </head>
 <body>
     <div class="container-fluid py-4">
+        <!-- Bağlantı Test Kartları -->
+        <div class="row mb-4">
+            <!-- WordPress Test -->
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fab fa-wordpress text-primary me-2"></i>WordPress Bağlantısı
+                        </h5>
+                        <p class="card-text text-muted small">WooCommerce API bağlantısını test edin ve mevcut ürün sayısını görün.</p>
+                        <div class="d-flex align-items-center mt-3">
+                            <button id="testWordPress" class="btn btn-primary me-2">
+                                <i class="fas fa-plug"></i> Bağlantıyı Test Et
+                            </button>
+                            <div id="wpStatus" class="small"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Supabase Test -->
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-database text-success me-2"></i>Supabase Bağlantısı
+                        </h5>
+                        <p class="card-text text-muted small">Supabase veritabanı bağlantısını test edin ve tablo durumunu kontrol edin.</p>
+                        <div class="d-flex align-items-center mt-3">
+                            <button id="testSupabase" class="btn btn-success me-2">
+                                <i class="fas fa-plug"></i> Bağlantıyı Test Et
+                            </button>
+                            <div id="supabaseStatus" class="small"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sistem Durumu -->
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <i class="fas fa-server text-info me-2"></i>Sistem Durumu
+                        </h5>
+                        <div class="mt-3 small">
+                            <div class="mb-2">
+                                <i class="fas fa-check-circle text-success me-2"></i>PHP Sürümü: <span class="text-muted"><?php echo phpversion(); ?></span>
+                            </div>
+                            <div class="mb-2">
+                                <i class="fas fa-check-circle text-success me-2"></i>Bellek Limiti: <span class="text-muted"><?php echo ini_get('memory_limit'); ?></span>
+                            </div>
+                            <div>
+                                <i class="fas fa-check-circle text-success me-2"></i>Max Execution Time: <span class="text-muted"><?php echo ini_get('max_execution_time'); ?>s</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Arama Formu -->
         <div class="row mb-4">
             <div class="col-md-12">
@@ -126,6 +187,68 @@ session_start();
         const selectAllBtn = document.getElementById('selectAll');
         const deselectAllBtn = document.getElementById('deselectAll');
         const importSelectedBtn = document.getElementById('importSelected');
+        const testWordPressBtn = document.getElementById('testWordPress');
+        const testSupabaseBtn = document.getElementById('testSupabase');
+        const wpStatus = document.getElementById('wpStatus');
+        const supabaseStatus = document.getElementById('supabaseStatus');
+
+        // WordPress bağlantı testi
+        testWordPressBtn.addEventListener('click', async () => {
+            try {
+                testWordPressBtn.disabled = true;
+                wpStatus.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Test ediliyor...</span>';
+                
+                const response = await fetch('test_connection.php?type=wordpress');
+                const data = await response.json();
+                
+                if (data.success) {
+                    wpStatus.innerHTML = `
+                        <span class="text-success">
+                            <i class="fas fa-check-circle me-2"></i>
+                            Bağlantı başarılı! (${data.product_count} ürün)
+                        </span>`;
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (error) {
+                wpStatus.innerHTML = `
+                    <span class="text-danger">
+                        <i class="fas fa-times-circle me-2"></i>
+                        ${error.message}
+                    </span>`;
+            } finally {
+                testWordPressBtn.disabled = false;
+            }
+        });
+
+        // Supabase bağlantı testi
+        testSupabaseBtn.addEventListener('click', async () => {
+            try {
+                testSupabaseBtn.disabled = true;
+                supabaseStatus.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Test ediliyor...</span>';
+                
+                const response = await fetch('test_connection.php?type=supabase');
+                const data = await response.json();
+                
+                if (data.success) {
+                    supabaseStatus.innerHTML = `
+                        <span class="text-success">
+                            <i class="fas fa-check-circle me-2"></i>
+                            Bağlantı başarılı!
+                        </span>`;
+                } else {
+                    throw new Error(data.error);
+                }
+            } catch (error) {
+                supabaseStatus.innerHTML = `
+                    <span class="text-danger">
+                        <i class="fas fa-times-circle me-2"></i>
+                        ${error.message}
+                    </span>`;
+            } finally {
+                testSupabaseBtn.disabled = false;
+            }
+        });
 
         // Ürün kartı HTML'i oluştur
         function createProductCard(product) {
