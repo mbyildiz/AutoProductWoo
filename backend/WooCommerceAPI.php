@@ -5,6 +5,7 @@ class WooCommerceAPI {
     private $consumer_secret;
     private $wp_api_url;
     private $process_times = []; // İşlem sürelerini tutacak dizi
+    private $duplicate_products = []; // Tekrar eden ürünleri tutacak dizi
     
     public function __construct() {
         $this->consumer_key = WP_CONSUMER_KEY;
@@ -30,6 +31,73 @@ class WooCommerceAPI {
     }
     
     /**
+     * Aynı isimde ürün var mı kontrol et
+     * @param string $product_name
+     * @return array|null Ürün varsa ürün bilgilerini, yoksa null döner
+     */
+    private function checkProductExists($product_name) {
+        try {
+            if (DEBUG_MODE) {
+                error_log("\n========= ÜRÜN KONTROL EDİLİYOR =========");
+                error_log("Aranan ürün adı: " . $product_name);
+            }
+            
+            // Ürün adını URL için hazırla
+            $encoded_name = urlencode($product_name);
+            
+            // Ürünleri ara
+            $result = $this->makeRequest('GET', '/products?' . http_build_query([
+                'search' => $product_name,
+                'per_page' => 100
+            ]), null, true);
+            
+            if (!empty($result['data'])) {
+                foreach ($result['data'] as $product) {
+                    // Tam eşleşme kontrolü
+                    if (strtolower(trim($product['name'])) === strtolower(trim($product_name))) {
+                        if (DEBUG_MODE) {
+                            error_log("Aynı isimde ürün bulundu: ID=" . $product['id']);
+                        }
+                        return $product;
+                    }
+                }
+            }
+            
+            if (DEBUG_MODE) {
+                error_log("Aynı isimde ürün bulunamadı");
+                error_log("========= ÜRÜN KONTROL TAMAMLANDI =========\n");
+            }
+            
+            return null;
+            
+        } catch (Exception $e) {
+            error_log("Ürün kontrolü sırasında hata: " . $e->getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Tekrar eden ürünleri getir
+     * @return array
+     */
+    public function getDuplicateProducts() {
+        return $this->duplicate_products;
+    }
+
+    /**
+     * Tekrar eden ürün ekle
+     * @param array $product_data Ürün bilgileri
+     * @param array $existing_product Mevcut ürün bilgileri
+     */
+    private function addDuplicateProduct($product_data, $existing_product) {
+        $this->duplicate_products[] = [
+            'attempted_product' => $product_data,
+            'existing_product' => $existing_product,
+            'timestamp' => date('Y-m-d H:i:s')
+        ];
+    }
+    
+    /**
      * Ürün ekle
      * @param array $product_data
      * @return array|null
@@ -39,6 +107,19 @@ class WooCommerceAPI {
             if (DEBUG_MODE) {
                 error_log("\n========= ÜRÜN EKLEME BAŞLIYOR =========");
                 error_log("Ürün Verisi: " . print_r($product_data, true));
+            }
+            
+            // Önce aynı isimde ürün var mı kontrol et
+            $existing_product = $this->checkProductExists($product_data['name']);
+            
+            if ($existing_product !== null) {
+                if (DEBUG_MODE) {
+                    error_log("Aynı isimde ürün zaten mevcut. Ürün ID: " . $existing_product['id']);
+                    error_log("========= ÜRÜN EKLEME İPTAL EDİLDİ =========\n");
+                }
+                // Tekrar eden ürünü listeye ekle
+                $this->addDuplicateProduct($product_data, $existing_product);
+                throw new Exception("Bu isimde bir ürün zaten mevcut: " . $product_data['name']);
             }
             
             $result = $this->makeRequest('POST', '/products', $product_data);

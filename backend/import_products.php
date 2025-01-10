@@ -48,6 +48,7 @@ try {
         'total_products' => count($hb_products['products']),
         'imported_products' => 0,
         'failed_products' => 0,
+        'duplicate_products' => 0,
         'products' => []
     ];
     
@@ -77,12 +78,22 @@ try {
             }
             
         } catch (Exception $e) {
-            $results['failed_products']++;
-            $results['products'][] = [
-                'hb_id' => $hb_product['id'],
-                'status' => 'error',
-                'message' => $e->getMessage()
-            ];
+            // Eğer hata tekrar eden üründen kaynaklanıyorsa
+            if (strpos($e->getMessage(), "Bu isimde bir ürün zaten mevcut") !== false) {
+                $results['duplicate_products']++;
+                $results['products'][] = [
+                    'hb_id' => $hb_product['id'],
+                    'status' => 'duplicate',
+                    'message' => $e->getMessage()
+                ];
+            } else {
+                $results['failed_products']++;
+                $results['products'][] = [
+                    'hb_id' => $hb_product['id'],
+                    'status' => 'error',
+                    'message' => $e->getMessage()
+                ];
+            }
             
             if (DEBUG_MODE) {
                 error_log("Ürün içe aktarma hatası (ID: {$hb_product['id']}): " . $e->getMessage());
@@ -108,6 +119,9 @@ try {
         'wordpress_duration' => sprintf("%.2f dakika", ($wordpress_duration / 60)),
         'total_duration' => sprintf("%.2f dakika", ($total_duration / 60))
     ];
+    
+    // Tekrar eden ürünleri ekle
+    $results['duplicate_product_list'] = $wc_api->getDuplicateProducts();
     
     // Örnek ürünleri ekle (en fazla 5 adet)
     $results['sample_products'] = array_slice($results['products'], 0, 5);
