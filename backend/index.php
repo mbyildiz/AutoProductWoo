@@ -292,16 +292,16 @@ session_start();
 
         // Ürünleri WordPress'e aktar
         async function importToWordPress(products) {
-            importProgress.style.display = 'block';
-            updateProgress(0, products.length);
-
-            const searchParams = new URLSearchParams({
-                search: document.getElementById('search').value,
-                page: '1',
-                limit: products.length.toString()
-            });
-
             try {
+                importProgress.style.display = 'block';
+                updateProgress(0, products.length);
+
+                const searchParams = new URLSearchParams({
+                    search: document.getElementById('search').value,
+                    page: '1',
+                    limit: products.length.toString()
+                });
+
                 const response = await fetch(`import_products.php?${searchParams.toString()}`);
                 const result = await response.json();
 
@@ -327,21 +327,75 @@ session_start();
                         });
                     }
 
-                    alert(message);
+                    // Önce loading ve progress göstergelerini kapat
+                    importProgress.style.display = 'none';
+                    toggleLoading(false);
+
+                    // Sonra alert mesajını göster
+                    setTimeout(() => {
+                        alert(message);
+                    }, 100);
+
                 } else {
                     throw new Error(result.error || 'Aktarım sırasında bir hata oluştu');
                 }
             } catch (error) {
-                alert('Hata: ' + error.message);
-            } finally {
+                // Hata durumunda da aynı sıralamayı uygula
                 importProgress.style.display = 'none';
+                toggleLoading(false);
+                
+                setTimeout(() => {
+                    alert('Hata: ' + error.message);
+                }, 100);
             }
         }
+
+        // Tümünü seç/kaldır butonları
+        selectAllBtn.addEventListener('click', () => {
+            // Önce Set'i temizle
+            selectedProducts.clear();
+            
+            // Mevcut ürünlerin ID'lerini Set'e ekle
+            currentProducts.forEach(product => {
+                selectedProducts.add(product.id.toString());
+            });
+            
+            // Checkbox'ları güncelle
+            document.querySelectorAll('.product-checkbox').forEach(checkbox => {
+                checkbox.checked = true;
+            });
+            
+            console.log('Seçilen ürün sayısı:', selectedProducts.size);
+            console.log('Seçilen ürünler:', Array.from(selectedProducts));
+            console.log('Mevcut ürünler:', currentProducts.length);
+            
+            // Import butonunu güncelle
+            importSelectedBtn.disabled = selectedProducts.size === 0;
+        });
+
+        deselectAllBtn.addEventListener('click', () => {
+            // Tüm checkbox'ları temizle
+            document.querySelectorAll('.product-checkbox').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            
+            // Set'i temizle
+            selectedProducts.clear();
+            
+            console.log('Seçim kaldırıldı. Seçilen ürün sayısı:', selectedProducts.size);
+            
+            // Import butonunu devre dışı bırak
+            importSelectedBtn.disabled = true;
+        });
 
         // Form gönderildiğinde
         searchForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             toggleLoading(true);
+
+            // Yeni arama başladığında seçimleri temizle
+            selectedProducts.clear();
+            importSelectedBtn.disabled = true;
 
             const formData = new FormData(this);
             const searchParams = new URLSearchParams();
@@ -355,6 +409,7 @@ session_start();
 
                 if (data.success && Array.isArray(data.products)) {
                     currentProducts = data.products;
+                    console.log('Yüklenen ürün sayısı:', currentProducts.length);
                     
                     if (currentProducts.length === 0) {
                         productList.innerHTML = '<div class="col-12"><div class="alert alert-warning">Ürün bulunamadı</div></div>';
@@ -366,9 +421,12 @@ session_start();
                             checkbox.addEventListener('change', function() {
                                 if (this.checked) {
                                     selectedProducts.add(this.value);
+                                    console.log('Ürün seçildi:', this.value);
                                 } else {
                                     selectedProducts.delete(this.value);
+                                    console.log('Ürün seçimi kaldırıldı:', this.value);
                                 }
+                                console.log('Toplam seçili ürün:', selectedProducts.size);
                                 importSelectedBtn.disabled = selectedProducts.size === 0;
                             });
                         });
@@ -384,23 +442,6 @@ session_start();
             }
         });
 
-        // Tümünü seç/kaldır butonları
-        selectAllBtn.addEventListener('click', () => {
-            document.querySelectorAll('.product-checkbox').forEach(checkbox => {
-                checkbox.checked = true;
-                selectedProducts.add(checkbox.value);
-            });
-            importSelectedBtn.disabled = false;
-        });
-
-        deselectAllBtn.addEventListener('click', () => {
-            document.querySelectorAll('.product-checkbox').forEach(checkbox => {
-                checkbox.checked = false;
-                selectedProducts.delete(checkbox.value);
-            });
-            importSelectedBtn.disabled = true;
-        });
-
         // WordPress'e aktar butonu
         importSelectedBtn.addEventListener('click', async () => {
             if (selectedProducts.size === 0) return;
@@ -410,7 +451,6 @@ session_start();
             if (confirm(`${selectedProducts.size} ürün WordPress'e aktarılacak. Onaylıyor musunuz?`)) {
                 toggleLoading(true, 'Ürünler WordPress\'e aktarılıyor...');
                 await importToWordPress(selectedProductsArray);
-                toggleLoading(false);
             }
         });
     </script>
