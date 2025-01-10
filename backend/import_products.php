@@ -8,6 +8,9 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 try {
+    // İşlem başlangıç zamanı
+    $total_start_time = microtime(true);
+    
     // HepsiBurada API'sini başlat
     $hb_api = new HepsiBuradaAPI();
     
@@ -23,12 +26,22 @@ try {
         throw new Exception("Arama terimi gerekli");
     }
     
+    // HepsiBurada'dan ürünleri alma başlangıç zamanı
+    $crawler_start_time = microtime(true);
+    
     // HepsiBurada'dan ürünleri al
     $hb_products = $hb_api->search($search_term, $page, $limit);
+    
+    // HepsiBurada'dan ürünleri alma bitiş zamanı
+    $crawler_end_time = microtime(true);
+    $crawler_duration = $crawler_end_time - $crawler_start_time;
     
     if (!$hb_products['success']) {
         throw new Exception("HepsiBurada'dan ürünler alınamadı: " . ($hb_products['error'] ?? 'Bilinmeyen hata'));
     }
+    
+    // WordPress ürün ekleme başlangıç zamanı
+    $wordpress_start_time = microtime(true);
     
     $results = [
         'success' => true,
@@ -80,6 +93,27 @@ try {
         // Rate limiting - her istek arasında kısa bir bekleme
         usleep(500000); // 0.5 saniye bekle
     }
+    
+    // WordPress ürün ekleme bitiş zamanı
+    $wordpress_end_time = microtime(true);
+    $wordpress_duration = $wordpress_end_time - $wordpress_start_time;
+    
+    // Toplam süre hesaplama
+    $total_end_time = microtime(true);
+    $total_duration = $total_end_time - $total_start_time;
+    
+    // İşlem sürelerini sonuçlara ekle
+    $results['process_times'] = [
+        'crawler_duration' => sprintf("%.2f dakika", ($crawler_duration / 60)),
+        'wordpress_duration' => sprintf("%.2f dakika", ($wordpress_duration / 60)),
+        'total_duration' => sprintf("%.2f dakika", ($total_duration / 60))
+    ];
+    
+    // Örnek ürünleri ekle (en fazla 5 adet)
+    $results['sample_products'] = array_slice($results['products'], 0, 5);
+    
+    // Tüm ürünleri kaldır (örnek ürünler hariç)
+    unset($results['products']);
     
     // JSON olarak yanıt ver
     header('Content-Type: application/json');

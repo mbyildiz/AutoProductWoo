@@ -4,11 +4,29 @@ class WooCommerceAPI {
     private $consumer_key;
     private $consumer_secret;
     private $wp_api_url;
+    private $process_times = []; // İşlem sürelerini tutacak dizi
     
     public function __construct() {
         $this->consumer_key = WP_CONSUMER_KEY;
         $this->consumer_secret = WP_CONSUMER_SECRET;
         $this->wp_api_url = WP_API_URL;
+    }
+    
+    /**
+     * İşlem süresini kaydet
+     * @param string $key
+     * @param float $time
+     */
+    public function addProcessTime($key, $time) {
+        $this->process_times[$key] = $time;
+    }
+    
+    /**
+     * İşlem sürelerini getir
+     * @return array
+     */
+    public function getProcessTimes() {
+        return $this->process_times;
     }
     
     /**
