@@ -87,14 +87,16 @@ class WooCommerceAPI {
      * Kategori var mı kontrol et veya oluştur
      * @param string $category_name
      * @param int $parent_id
+     * @param string $image_url
      * @return int Category ID
      */
-    private function getOrCreateCategory($category_name, $parent_id = 0) {
+    private function getOrCreateCategory($category_name, $parent_id = 0, $image_url = '') {
         try {
             if (DEBUG_MODE) {
                 error_log("\n========= KATEGORİ İŞLEMİ BAŞLIYOR =========");
                 error_log("Kategori adı: " . $category_name);
                 error_log("Üst kategori ID: " . $parent_id);
+                error_log("Resim URL: " . $image_url);
             }
 
             // Kategori adını normalize et
@@ -145,6 +147,21 @@ class WooCommerceAPI {
                         error_log("Kategori adı: " . $category['name']);
                         error_log("Üst kategori ID: " . $category['parent']);
                     }
+                    
+                    // Eğer resim URL'si varsa ve kategorinin resmi yoksa, resmi güncelle
+                    if (!empty($image_url) && empty($category['image'])) {
+                        try {
+                            $this->makeRequest('PUT', "/products/categories/{$category['id']}", [
+                                'image' => ['src' => $image_url]
+                            ]);
+                            if (DEBUG_MODE) {
+                                error_log("Kategori resmi güncellendi: " . $image_url);
+                            }
+                        } catch (Exception $e) {
+                            error_log("Kategori resmi güncellenirken hata: " . $e->getMessage());
+                        }
+                    }
+                    
                     return $category['id'];
                 }
             }
@@ -153,11 +170,18 @@ class WooCommerceAPI {
             try {
                 $slug = $this->create_slug($category_name);
                 
-                $new_category = $this->makeRequest('POST', '/products/categories', [
+                $category_data = [
                     'name' => $category_name,
                     'slug' => $slug,
                     'parent' => $parent_id
-                ]);
+                ];
+                
+                // Eğer resim URL'si varsa ekle
+                if (!empty($image_url)) {
+                    $category_data['image'] = ['src' => $image_url];
+                }
+                
+                $new_category = $this->makeRequest('POST', '/products/categories', $category_data);
                 
                 if (DEBUG_MODE) {
                     error_log("Yeni kategori oluşturuldu:");
@@ -165,6 +189,9 @@ class WooCommerceAPI {
                     error_log("Ad: " . $new_category['name']);
                     error_log("Slug: " . $new_category['slug']);
                     error_log("Üst ID: " . $new_category['parent']);
+                    if (!empty($image_url)) {
+                        error_log("Resim URL: " . $image_url);
+                    }
                 }
                 
                 return $new_category['id'];
@@ -180,6 +207,21 @@ class WooCommerceAPI {
                             if (DEBUG_MODE) {
                                 error_log("Kategori slug ile bulundu. ID: " . $category['id']);
                             }
+                            
+                            // Eğer resim URL'si varsa ve kategorinin resmi yoksa, resmi güncelle
+                            if (!empty($image_url) && empty($category['image'])) {
+                                try {
+                                    $this->makeRequest('PUT', "/products/categories/{$category['id']}", [
+                                        'image' => ['src' => $image_url]
+                                    ]);
+                                    if (DEBUG_MODE) {
+                                        error_log("Kategori resmi güncellendi: " . $image_url);
+                                    }
+                                } catch (Exception $e) {
+                                    error_log("Kategori resmi güncellenirken hata: " . $e->getMessage());
+                                }
+                            }
+                            
                             return $category['id'];
                         }
                     }
@@ -485,8 +527,8 @@ class WooCommerceAPI {
                 throw new Exception("Kategori bilgileri eksik");
             }
 
-            $main_category_id = $this->getOrCreateCategory($main_category);
-            $sub_category_id = $this->getOrCreateCategory($sub_category, $main_category_id);
+            $main_category_id = $this->getOrCreateCategory($main_category, 0, $hb_product['image_url'] ?? '');
+            $sub_category_id = $this->getOrCreateCategory($sub_category, $main_category_id, $hb_product['image_url'] ?? '');
 
             if (DEBUG_MODE) {
                 error_log("Kategoriler oluşturuldu - Ana: {$main_category} ({$main_category_id}), Alt: {$sub_category} ({$sub_category_id})");
