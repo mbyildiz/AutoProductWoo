@@ -574,9 +574,10 @@ class WooCommerceAPI {
      * @param string $method
      * @param string $endpoint
      * @param array $data
+     * @param bool $include_headers Header bilgilerini dahil et
      * @return array|null
      */
-    private function makeRequest($method, $endpoint, $data = null) {
+    private function makeRequest($method, $endpoint, $data = null, $include_headers = false) {
         $url = $this->wp_api_url . $endpoint;
         
         if (DEBUG_MODE) {
@@ -605,6 +606,10 @@ class WooCommerceAPI {
         // Basic Auth
         curl_setopt($ch, CURLOPT_USERPWD, $this->consumer_key . ":" . $this->consumer_secret);
         
+        if ($include_headers) {
+            curl_setopt($ch, CURLOPT_HEADER, true);
+        }
+        
         if ($data !== null) {
             $json_data = json_encode($data, JSON_UNESCAPED_UNICODE);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $json_data);
@@ -631,6 +636,31 @@ class WooCommerceAPI {
             throw new Exception("CURL Hatası: " . $error);
         }
         
+        if ($include_headers) {
+            $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+            $headers = substr($response, 0, $headerSize);
+            $body = substr($response, $headerSize);
+            curl_close($ch);
+            
+            // Header'lardan toplam sayıyı al
+            preg_match('/X-WP-Total: (\d+)/i', $headers, $matches);
+            $total = isset($matches[1]) ? (int)$matches[1] : 0;
+            
+            $decoded = json_decode($body, true);
+            
+            if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
+                error_log("JSON Decode Hatası: " . json_last_error_msg());
+                error_log("Ham Yanıt: " . $body);
+                throw new Exception("API yanıtı JSON formatında değil");
+            }
+            
+            return [
+                'data' => $decoded,
+                'total' => $total,
+                'headers' => $headers
+            ];
+        }
+        
         curl_close($ch);
         
         $decoded = json_decode($response, true);
@@ -652,5 +682,44 @@ class WooCommerceAPI {
         }
         
         return $decoded;
+    }
+    
+    /**
+     * Tüm ürünleri getir
+     * @param int $page Sayfa numarası
+     * @param int $per_page Sayfa başına ürün sayısı
+     * @return array
+     */
+    public function getProducts($page = 1, $per_page = 100) {
+        try {
+            if (DEBUG_MODE) {
+                error_log("\n========= ÜRÜN LİSTESİ ALINIYOR =========");
+                error_log("Sayfa: " . $page);
+                error_log("Sayfa başına: " . $per_page);
+            }
+            
+            $params = [
+                'page' => $page,
+                'per_page' => $per_page,
+                'status' => 'publish'
+            ];
+            
+            $result = $this->makeRequest('GET', '/products?' . http_build_query($params), null, true);
+            
+            if (DEBUG_MODE) {
+                error_log("Toplam ürün sayısı: " . $result['total']);
+                error_log("Dönen ürün sayısı: " . count($result['data']));
+                error_log("========= ÜRÜN LİSTESİ TAMAMLANDI =========\n");
+            }
+            
+            return [
+                'products' => $result['data'],
+                'total' => $result['total']
+            ];
+            
+        } catch (Exception $e) {
+            error_log("Ürün listesi alınırken hata: " . $e->getMessage());
+            throw new Exception("Ürünler alınamadı: " . $e->getMessage());
+        }
     }
 } 
