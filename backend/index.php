@@ -306,17 +306,28 @@ session_start();
                 const result = await response.json();
 
                 if (result.success) {
-                    // Başarılı aktarım
-                    alert(`
+                    // Başarılı aktarım mesajını oluştur
+                    let message = `
                         Aktarım Tamamlandı!
                         Toplam Ürün: ${result.total_products}
                         Başarılı: ${result.imported_products}
                         Başarısız: ${result.failed_products}
+                        Tekrar Eden: ${result.duplicate_products}
                         
                         Toplam Süre: ${result.process_times.total_duration}
                         Crawler Süresi: ${result.process_times.crawler_duration}
                         WordPress Süresi: ${result.process_times.wordpress_duration}
-                    `);
+                    `;
+
+                    // Eğer tekrar eden ürünler varsa, detayları ekle
+                    if (result.duplicate_products > 0 && result.duplicate_product_list) {
+                        message += "\n\nTekrar Eden Ürünler:";
+                        result.duplicate_product_list.forEach((item, index) => {
+                            message += `\n${index + 1}. ${item.attempted_product.name}`;
+                        });
+                    }
+
+                    alert(message);
                 } else {
                     throw new Error(result.error || 'Aktarım sırasında bir hata oluştu');
                 }
