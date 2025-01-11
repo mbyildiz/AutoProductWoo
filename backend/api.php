@@ -31,9 +31,15 @@ try {
     echo json_encode([
         'success' => true,
         'products' => $result['products'],
-        'total' => $result['total'] ?? count($result['products']),
-        'page' => $page,
-        'limit' => $limit
+        'pagination' => [
+            'current_page' => $page,
+            'per_page' => $limit,
+            'total_items' => $result['total'] ?? count($result['products']),
+            'total_pages' => ceil(($result['total'] ?? count($result['products'])) / $limit)
+        ],
+        'search_term' => $search,
+        'processed_count' => $result['processed_count'] ?? count($result['products']),
+        'batch_count' => $result['batch_count'] ?? 0
     ], JSON_UNESCAPED_UNICODE);
     
 } catch (Exception $e) {
