@@ -1,16 +1,20 @@
 <?php
+// WooCommerceAPI.php dosyanızın en üstüne ekleyin
+require_once __DIR__ . '/wp_imageUpload.php';
 
 class WooCommerceAPI {
     private $consumer_key;
     private $consumer_secret;
     private $wp_api_url;
     private $process_times = []; // İşlem sürelerini tutacak dizi
-    private $duplicate_products = []; // Tekrar eden ürünleri tutacak dizi
+    private $duplicate_products = [];
+    private $wp_imageUploader; // Tekrar eden ürünleri tutacak dizi
     
     public function __construct() {
         $this->consumer_key = WP_CONSUMER_KEY;
         $this->consumer_secret = WP_CONSUMER_SECRET;
         $this->wp_api_url = WP_API_URL;
+        $this->wp_imageUploader = new WPImageUploader();
     }
     
     /**
@@ -555,6 +559,49 @@ class WooCommerceAPI {
                         error_log("Ek resim eklendi: " . $img_url);
                     }
                 }
+            }
+        }
+        if (!empty($hb_product['img_description']) && is_array($hb_product['img_description'])) {
+            $description .= "\n\n"; // Açıklama ile resimler arasına boşluk ekle
+            foreach ($hb_product['img_description'] as $img_url) {
+                try {
+                    if (!empty($img_url)) {
+                        // URL'yi temizle
+                        $img_url = str_replace(' ', '%20', $img_url);
+                       
+                        
+                        // Uzantıyı kontrol et
+                        $allowed_extensions = ['jpg', 'jpeg', 'png'];
+                        $extension = strtolower(pathinfo($img_url, PATHINFO_EXTENSION));
+                        if (!in_array($extension, $allowed_extensions)) {
+                            if (DEBUG_MODE) {
+                                error_log("Sadece jpg, jpeg ve png uzantılı resimlere izin verilmektedir: " . $img_url);
+                            }
+                        }
+                        else{
+                            
+                            $result = $this->wp_imageUploader->uploadImage($img_url);                                                       
+                           
+                     if($result['status'] == 'success'){
+                        $description .= sprintf('<img src="%s" alt="%s" class="product-description-image" style="width: 100%;" />\n', 
+                                $result['url'], 
+                                $title); 
+                    }
+                    else{
+                        error_log("Resim yükleme hatası: " . $result['message']);
+                    }
+
+                        
+                        if (DEBUG_MODE) {
+                            error_log("Açıklama resmi eklendi json_encode(result['url'] " . json_encode($result['url'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+                        }
+                        }
+                        
+                        
+                    }
+                } catch (Exception $e) {
+                    error_log("Resim yükleme hatası: " . $e->getMessage());
+                }   
             }
         }
 
