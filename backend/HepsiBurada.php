@@ -454,8 +454,20 @@ class HepsiBuradaAPI extends HepsiBuradaScraper {
             $processedCount = 0;
             $batchNumber = 1;
             
-            // HTML'i bir kere al
-            $html = $this->fetchUrl($this->baseUrl . '?q=' . urlencode($searchTerm));
+            // Sayfa numarasına göre URL oluştur
+            $url = $this->baseUrl . '?q=' . urlencode($searchTerm);
+            if ($page > 1) {
+                $url .= '&sayfa=' . $page;
+            }
+            
+            if (DEBUG_MODE) {
+                error_log("Arama URL'si: " . $url);
+                error_log("Sayfa: " . $page);
+                error_log("Limit: " . $limit);
+            }
+            
+            // HTML'i sayfaya göre al
+            $html = $this->fetchUrl($url);
             preg_match_all('/<a[^>]*class="moria-ProductCard-gyqBb[^"]*".*?<\/a>/s', $html, $matches);
             
             if (!empty($matches[0])) {
@@ -476,7 +488,9 @@ class HepsiBuradaAPI extends HepsiBuradaScraper {
 
                         // Batch kontrolü
                         if ($processedCount > 0 && $processedCount % $this->batchSize === 0) {
-                            error_log("Batch #" . $batchNumber . " tamamlandı. " . $processedCount . " ürün işlendi.");
+                            if (DEBUG_MODE) {
+                                error_log("Batch #" . $batchNumber . " tamamlandı. " . $processedCount . " ürün işlendi.");
+                            }
                             sleep($this->sleepBetweenBatches);
                             $batchNumber++;
                         }
@@ -488,8 +502,9 @@ class HepsiBuradaAPI extends HepsiBuradaScraper {
                             $allProducts[] = $crawlResponse;
                             $processedCount++;
                             
-                            // İşlem durumunu logla
-                            error_log("Ürün işlendi: " . $processedCount . "/" . $limit);
+                            if (DEBUG_MODE) {
+                                error_log("Ürün işlendi: " . $processedCount . "/" . $limit);
+                            }
                         }
                     }
                 }

@@ -8,7 +8,7 @@ class WooCommerceAPI {
     private $wp_api_url;
     private $process_times = []; // İşlem sürelerini tutacak dizi
     private $duplicate_products = [];
-    private $wp_imageUploader; // Tekrar eden ürünleri tutacak dizi
+    private $wp_imageUploader; 
     
     public function __construct() {
         $this->consumer_key = WP_CONSUMER_KEY;
@@ -583,7 +583,7 @@ class WooCommerceAPI {
                             $result = $this->wp_imageUploader->uploadImage($img_url);                                                       
                            
                      if($result['status'] == 'success'){
-                        $description .= sprintf('<img src="%s" alt="%s" class="product-description-image" style="width: 100%;" />\n', 
+                        $description .= sprintf('<img src="%s" alt="%s" class="product-description-image"  />\n', 
                                 $result['url'], 
                                 $title); 
                     }
