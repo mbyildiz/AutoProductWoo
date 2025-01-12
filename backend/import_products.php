@@ -11,41 +11,25 @@ try {
     // İşlem başlangıç zamanı
     $total_start_time = microtime(true);
     
-    // HepsiBurada API'sini başlat
-    $hb_api = new HepsiBuradaAPI();
-    
     // WooCommerce API'sini başlat
     $wc_api = new WooCommerceAPI();
     
-    // Arama terimini ve sayfa numarasını al
-    $search_term = $_GET['search'] ?? '';
-    $page = intval($_GET['page'] ?? 1);
-    $limit = intval($_GET['limit'] ?? 10);
+    // POST verilerini al
+    $json_data = file_get_contents('php://input');
+    $post_data = json_decode($json_data, true);
     
-    if (empty($search_term)) {
-        throw new Exception("Arama terimi gerekli");
+    if (empty($post_data) || !isset($post_data['products']) || !is_array($post_data['products'])) {
+        throw new Exception("Geçersiz veri formatı");
     }
     
-    // HepsiBurada'dan ürünleri alma başlangıç zamanı
-    $crawler_start_time = microtime(true);
-    
-    // HepsiBurada'dan ürünleri al
-    $hb_products = $hb_api->search($search_term, $page, $limit);
-    
-    // HepsiBurada'dan ürünleri alma bitiş zamanı
-    $crawler_end_time = microtime(true);
-    $crawler_duration = $crawler_end_time - $crawler_start_time;
-    
-    if (!$hb_products['success']) {
-        throw new Exception("HepsiBurada'dan ürünler alınamadı: " . ($hb_products['error'] ?? 'Bilinmeyen hata'));
-    }
+    $products = $post_data['products'];
     
     // WordPress ürün ekleme başlangıç zamanı
     $wordpress_start_time = microtime(true);
     
     $results = [
         'success' => true,
-        'total_products' => count($hb_products['products']),
+        'total_products' => count($products),
         'imported_products' => 0,
         'failed_products' => 0,
         'duplicate_products' => 0,
@@ -53,10 +37,10 @@ try {
     ];
     
     // Her ürün için
-    foreach ($hb_products['products'] as $hb_product) {
+    foreach ($products as $product) {
         try {
-            // HepsiBurada verilerini WooCommerce formatına dönüştür
-            $wc_product_data = $wc_api->formatProductData($hb_product);
+            // WooCommerce formatına dönüştür
+            $wc_product_data = $wc_api->formatProductData($product);
             
             // WooCommerce'e ekle
             $response = $wc_api->createProduct($wc_product_data);
@@ -64,14 +48,14 @@ try {
             if ($response) {
                 $results['imported_products']++;
                 $results['products'][] = [
-                    'hb_id' => $hb_product['id'],
+                    'hb_id' => $product['id'],
                     'wc_id' => $response['id'],
                     'status' => 'success',
                     'message' => 'Başarıyla içe aktarıldı'
                 ];
                 
                 if (DEBUG_MODE) {
-                    error_log("Ürün başarıyla eklendi (ID: {$hb_product['id']}, WC ID: {$response['id']})");
+                    error_log("Ürün başarıyla eklendi (ID: {$product['id']}, WC ID: {$response['id']})");
                 }
             } else {
                 throw new Exception("WooCommerce API yanıt vermedi");
@@ -82,21 +66,21 @@ try {
             if (strpos($e->getMessage(), "Bu isimde bir ürün zaten mevcut") !== false) {
                 $results['duplicate_products']++;
                 $results['products'][] = [
-                    'hb_id' => $hb_product['id'],
+                    'hb_id' => $product['id'],
                     'status' => 'duplicate',
                     'message' => $e->getMessage()
                 ];
             } else {
                 $results['failed_products']++;
                 $results['products'][] = [
-                    'hb_id' => $hb_product['id'],
+                    'hb_id' => $product['id'],
                     'status' => 'error',
                     'message' => $e->getMessage()
                 ];
             }
             
             if (DEBUG_MODE) {
-                error_log("Ürün içe aktarma hatası (ID: {$hb_product['id']}): " . $e->getMessage());
+                error_log("Ürün içe aktarma hatası (ID: {$product['id']}): " . $e->getMessage());
                 error_log("Hata detayı: " . $e->getTraceAsString());
             }
         }
@@ -115,7 +99,6 @@ try {
     
     // İşlem sürelerini sonuçlara ekle
     $results['process_times'] = [
-        'crawler_duration' => sprintf("%.2f dakika", ($crawler_duration / 60)),
         'wordpress_duration' => sprintf("%.2f dakika", ($wordpress_duration / 60)),
         'total_duration' => sprintf("%.2f dakika", ($total_duration / 60))
     ];
