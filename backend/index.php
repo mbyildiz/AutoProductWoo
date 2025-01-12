@@ -295,11 +295,13 @@ session_start();
             try {
                 importProgress.style.display = 'block';
                 updateProgress(0, products.length);
+                console.log('importToWordPress  products: ' + products);
 
                 const searchParams = new URLSearchParams({
                     search: document.getElementById('search').value,
-                    page: '1',
-                    limit: products.length.toString()
+                    page: document.getElementById('page').value,
+                    limit: document.getElementById('limit').value,
+                    console.log(search + page + limit);
                 });
 
                 const response = await fetch(`import_products.php?${searchParams.toString()}`);
@@ -405,6 +407,7 @@ session_start();
 
             try {
                 const response = await fetch(`api.php?${searchParams.toString()}`);
+                console.log(`api.php?${searchParams.toString()}`);
                 const data = await response.json();
 
                 if (data.success && Array.isArray(data.products)) {
@@ -447,10 +450,11 @@ session_start();
             if (selectedProducts.size === 0) return;
 
             const selectedProductsArray = currentProducts.filter(p => selectedProducts.has(p.id.toString()));
-            
+            console.log('Ürünler Aktarılıyor : ' + selectedProductsArray);
             if (confirm(`${selectedProducts.size} ürün WordPress'e aktarılacak. Onaylıyor musunuz?`)) {
-                toggleLoading(true, 'Ürünler WordPress\'e aktarılıyor...');
+                toggleLoading(true, 'Ürünler WordPress\'e aktarılıyor...');                
                 await importToWordPress(selectedProductsArray);
+                
             }
         });
     </script>

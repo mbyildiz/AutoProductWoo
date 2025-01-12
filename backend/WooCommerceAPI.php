@@ -41,13 +41,12 @@ class WooCommerceAPI {
      */
     private function checkProductExists($product_name) {
         try {
-            if (DEBUG_MODE) {
-                error_log("\n========= ÜRÜN KONTROL EDİLİYOR =========");
-                error_log("Aranan ürün adı: " . $product_name);
-            }
+            error_log("\n========= ÜRÜN KONTROL EDİLİYOR =========");
+            error_log("Aranan ürün adı: " . $product_name);
             
-            // Ürün adını URL için hazırla
-            $encoded_name = urlencode($product_name);
+            // Ürün adını normalize et
+            $normalized_search_name = $this->normalizeProductName($product_name);
+            error_log("Normalize edilmiş aranan ürün adı: " . $normalized_search_name);
             
             // Ürünleri ara
             $result = $this->makeRequest('GET', '/products?' . http_build_query([
@@ -56,28 +55,63 @@ class WooCommerceAPI {
             ]), null, true);
             
             if (!empty($result['data'])) {
+                error_log("Bulunan toplam ürün sayısı: " . count($result['data']));
+                
                 foreach ($result['data'] as $product) {
+                    $normalized_product_name = $this->normalizeProductName($product['name']);
+                    error_log("Karşılaştırılan ürün: " . $product['name']);
+                    error_log("Normalize edilmiş ürün adı: " . $normalized_product_name);
+                    
                     // Tam eşleşme kontrolü
-                    if (strtolower(trim($product['name'])) === strtolower(trim($product_name))) {
-                        if (DEBUG_MODE) {
-                            error_log("Aynı isimde ürün bulundu: ID=" . $product['id']);
-                        }
+                    if ($normalized_product_name === $normalized_search_name) {
+                        error_log("Eşleşme bulundu!");
+                        error_log("Ürün ID: " . $product['id']);
+                        error_log("Ürün Adı: " . $product['name']);
                         return $product;
                     }
                 }
+                error_log("Hiçbir ürün eşleşmedi.");
+            } else {
+                error_log("Hiç ürün bulunamadı.");
             }
             
-            if (DEBUG_MODE) {
-                error_log("Aynı isimde ürün bulunamadı");
-                error_log("========= ÜRÜN KONTROL TAMAMLANDI =========\n");
-            }
-            
+            error_log("========= ÜRÜN KONTROL TAMAMLANDI =========\n");
             return null;
             
         } catch (Exception $e) {
             error_log("Ürün kontrolü sırasında hata: " . $e->getMessage());
             return null;
         }
+    }
+    
+    /**
+     * Ürün adını normalize et
+     * @param string $name
+     * @return string
+     */
+    private function normalizeProductName($name) {
+        // Boşlukları temizle
+        $name = trim($name);
+        
+        // HTML entityleri düzelt
+        $name = html_entity_decode($name, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        
+        // Özel karakterleri kaldır
+        $name = str_replace(['&', '+', '/', '\\', '@', '#', '$', '%', '^', '*', '='], ' ', $name);
+        
+        // Türkçe karakterleri düzelt
+        $tr = array('ı', 'ğ', 'ü', 'ş', 'ö', 'ç', 'İ', 'Ğ', 'Ü', 'Ş', 'Ö', 'Ç');
+        $eng = array('i', 'g', 'u', 's', 'o', 'c', 'i', 'g', 'u', 's', 'o', 'c');
+        $name = str_replace($tr, $eng, $name);
+        
+        // Tüm karakterleri küçük harfe çevir
+        $name = mb_strtolower($name, 'UTF-8');
+        
+        // Çoklu boşlukları tek boşluğa çevir
+        $name = preg_replace('/\s+/', ' ', $name);
+        
+        // Son bir kez trim
+        return trim($name);
     }
     
     /**
