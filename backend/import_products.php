@@ -7,6 +7,10 @@ require_once 'WooCommerceAPI.php';
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
+// Maksimum çalışma süresini artır
+set_time_limit(900); // 16 dakika
+ini_set('max_execution_time', 900);
+
 try {
     // İşlem başlangıç zamanı
     $total_start_time = microtime(true);
@@ -86,7 +90,7 @@ try {
         }
         
         // Rate limiting - her istek arasında kısa bir bekleme
-        usleep(500000); // 0.5 saniye bekle
+        usleep(200000); // 0.2 saniye bekle (0.5 yerine)
     }
     
     // WordPress ürün ekleme bitiş zamanı
