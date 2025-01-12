@@ -301,7 +301,7 @@ session_start();
                     search: document.getElementById('search').value,
                     page: document.getElementById('page').value,
                     limit: document.getElementById('limit').value,
-                    console.log(search + page + limit);
+                    
                 });
 
                 const response = await fetch(`import_products.php?${searchParams.toString()}`);
