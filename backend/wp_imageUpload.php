@@ -2,7 +2,7 @@
 require_once __DIR__ . '/config.php';
 
 // Maksimum çalışma süresini artır
-set_time_limit(900); // 16 dakika
+set_time_limit(900); // 15 dakika
 ini_set('max_execution_time', 900);
 
 class WPImageUploader {
