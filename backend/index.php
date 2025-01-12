@@ -452,9 +452,63 @@ session_start();
             const selectedProductsArray = currentProducts.filter(p => selectedProducts.has(p.id.toString()));
             console.log('Ürünler Aktarılıyor : ' + selectedProductsArray);
             if (confirm(`${selectedProducts.size} ürün WordPress'e aktarılacak. Onaylıyor musunuz?`)) {
-                toggleLoading(true, 'Ürünler WordPress\'e aktarılıyor...');                
-                await importToWordPress(selectedProductsArray);
+                toggleLoading(true, 'Ürünler WordPress\'e aktarılıyor...');
                 
+                try {
+                    const response = await fetch('import_products.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            products: selectedProductsArray
+                        })
+                    });
+                    
+                    const result = await response.json();
+
+                    if (result.success) {
+                        // Başarılı aktarım mesajını oluştur
+                        let message = `
+                            Aktarım Tamamlandı!
+                            Toplam Ürün: ${result.total_products}
+                            Başarılı: ${result.imported_products}
+                            Başarısız: ${result.failed_products}
+                            Tekrar Eden: ${result.duplicate_products}
+                            
+                            Toplam Süre: ${result.process_times.total_duration}
+                            WordPress Süresi: ${result.process_times.wordpress_duration}
+                        `;
+
+                        // Eğer tekrar eden ürünler varsa, detayları ekle
+                        if (result.duplicate_products > 0 && result.duplicate_product_list) {
+                            message += "\n\nTekrar Eden Ürünler:";
+                            result.duplicate_product_list.forEach((item, index) => {
+                                message += `\n${index + 1}. ${item.attempted_product.name}`;
+                            });
+                        }
+
+                        // Önce loading ve progress göstergelerini kapat
+                        importProgress.style.display = 'none';
+                        toggleLoading(false);
+
+                        // Sonra alert mesajını göster
+                        setTimeout(() => {
+                            alert(message);
+                        }, 100);
+
+                    } else {
+                        throw new Error(result.error || 'Aktarım sırasında bir hata oluştu');
+                    }
+                } catch (error) {
+                    // Hata durumunda da aynı sıralamayı uygula
+                    importProgress.style.display = 'none';
+                    toggleLoading(false);
+                    
+                    setTimeout(() => {
+                        alert('Hata: ' + error.message);
+                    }, 100);
+                }
             }
         });
     </script>
