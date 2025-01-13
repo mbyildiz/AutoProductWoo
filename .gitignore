@@ -2,9 +2,13 @@
 debug_*.txt
 debug_*.html
 debug_*.json
+config.php
 
 # Cookie dosyası
 cookies.txt
+*_cookies.txt
+backend/cookies/*
+debug/*
 
 # IDE ve sistem dosyaları
 .vscode/

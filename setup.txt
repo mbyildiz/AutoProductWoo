@@ -4,7 +4,7 @@ PHP Projesini Çalıştırma Talimatları
 1. Doğru Dizine Git
 ------------------
 - Projenin ana dizinine git:
-  cd "C:\Users\mbyil\Desktop\Cursor projeler\Wordpress api ürün ekleme"
+  cd "C:\"
 
 2. PHP Sunucusunu Başlat
 -----------------------
