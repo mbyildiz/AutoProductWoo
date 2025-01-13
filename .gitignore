@@ -21,3 +21,5 @@ Thumbs.db
 error_log
 *.log 
 backend/config.php
+backend/config_mim.php
+backend/config_test.php

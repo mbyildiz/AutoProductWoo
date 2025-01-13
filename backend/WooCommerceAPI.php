@@ -241,7 +241,10 @@ class WooCommerceAPI {
                 ]);
                 
                 if (!empty($categories)) {
-                    $all_categories = array_merge($all_categories, $categories);
+                    foreach ($categories as $category) {
+                        $all_categories[] = $category;
+                    }
+                    unset($categories);
                 }
                 
                 $page++;
