@@ -2,7 +2,7 @@
 debug_*.txt
 debug_*.html
 debug_*.json
-config.php
+
 
 # Cookie dosyası
 cookies.txt
@@ -16,6 +16,8 @@ debug/*
 .DS_Store
 Thumbs.db
 
+
 # PHP hata logları
 error_log
 *.log 
+backend/config.php
