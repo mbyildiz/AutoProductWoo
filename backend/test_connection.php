@@ -5,7 +5,9 @@ require_once 'SupabaseDB.php';
 
 // Hata raporlamayı aktif et
 error_reporting(E_ALL);
-ini_set('display_errors', 0); // Hata mesajlarını ekranda gösterme
+ini_set('display_errors', 1); // Hata mesajlarını göster
+ini_set('log_errors', 1);
+ini_set('error_log', 'debug.log');
 
 // CORS ayarları
 header('Access-Control-Allow-Origin: *');
@@ -23,19 +25,33 @@ try {
         case 'wordpress':
             try {
                 $wc = new WooCommerceAPI();
-                $result = $wc->getProducts(1, 1); // Sadece 1 ürün al, toplam sayıyı öğrenmek için
+                error_log("WooCommerceAPI başlatıldı");
                 
-                if (!isset($result['products']) || !is_array($result['products'])) {
+                $result = $wc->getProducts(1, 1);
+                error_log("getProducts sonucu: " . print_r($result, true));
+                
+                if (!isset($result['products'])) {
+                    error_log("Geçersiz yanıt: products dizisi bulunamadı");
                     throw new Exception("WordPress'ten geçersiz yanıt alındı");
                 }
                 
-                echo json_encode([
+                if (!isset($result['total'])) {
+                    error_log("Geçersiz yanıt: total değeri bulunamadı");
+                    throw new Exception("WordPress'ten geçersiz yanıt alındı - total değeri yok");
+                }
+                
+                $response = [
                     'success' => true,
                     'product_count' => $result['total'],
                     'message' => 'WordPress bağlantısı başarılı'
-                ], JSON_UNESCAPED_UNICODE);
+                ];
+                
+                error_log("Başarılı yanıt gönderiliyor: " . print_r($response, true));
+                echo json_encode($response, JSON_UNESCAPED_UNICODE);
+                
             } catch (Exception $e) {
                 error_log("WordPress bağlantı hatası: " . $e->getMessage());
+                error_log("Hata detayı: " . $e->getTraceAsString());
                 throw new Exception("WordPress bağlantısı başarısız: " . $e->getMessage());
             }
             break;

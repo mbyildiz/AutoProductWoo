@@ -865,11 +865,9 @@ class WooCommerceAPI {
      */
     public function getProducts($page = 1, $per_page = 100) {
         try {
-            if (DEBUG_MODE) {
-                error_log("\n========= ÜRÜN LİSTESİ ALINIYOR =========");
-                error_log("Sayfa: " . $page);
-                error_log("Sayfa başına: " . $per_page);
-            }
+            error_log("\n========= ÜRÜN LİSTESİ ALINIYOR =========");
+            error_log("Sayfa: " . $page);
+            error_log("Sayfa başına: " . $per_page);
             
             $params = [
                 'page' => $page,
@@ -877,21 +875,42 @@ class WooCommerceAPI {
                 'status' => 'publish'
             ];
             
+            error_log("API isteği yapılıyor: " . $this->wp_api_url . '/products?' . http_build_query($params));
             $result = $this->makeRequest('GET', '/products?' . http_build_query($params), null, true);
+            error_log("API yanıtı: " . print_r($result, true));
             
-            if (DEBUG_MODE) {
-                error_log("Toplam ürün sayısı: " . $result['total']);
-                error_log("Dönen ürün sayısı: " . count($result['data']));
-                error_log("========= ÜRÜN LİSTESİ TAMAMLANDI =========\n");
+            if (!isset($result['data'])) {
+                error_log("API yanıtında 'data' alanı bulunamadı");
+                throw new Exception("API yanıtı geçersiz format");
+            }
+
+            if (!isset($result['headers'])) {
+                error_log("API yanıtında 'headers' alanı bulunamadı");
+                throw new Exception("API yanıtı geçersiz format - headers yok");
+            }
+
+            // Header'lardan toplam ürün sayısını al
+            $total = $this->getHeaderValue($result['headers'], 'X-WP-Total');
+            error_log("Toplam ürün sayısı (header'dan): " . $total);
+
+            if ($total === null) {
+                error_log("Header'da toplam ürün sayısı bulunamadı");
+                throw new Exception("Toplam ürün sayısı alınamadı");
             }
             
-            return [
+            $return_data = [
                 'products' => $result['data'],
-                'total' => $result['total']
+                'total' => (int)$total
             ];
+            
+            error_log("Dönüş verisi: " . print_r($return_data, true));
+            error_log("========= ÜRÜN LİSTESİ TAMAMLANDI =========\n");
+            
+            return $return_data;
             
         } catch (Exception $e) {
             error_log("Ürün listesi alınırken hata: " . $e->getMessage());
+            error_log("Hata detayı: " . $e->getTraceAsString());
             throw new Exception("Ürünler alınamadı: " . $e->getMessage());
         }
     }
