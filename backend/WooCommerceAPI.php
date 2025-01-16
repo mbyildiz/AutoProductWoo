@@ -219,76 +219,87 @@ class WooCommerceAPI {
             }
 
             // Kategori adını normalize et
-            $category_name = trim($category_name);
-            $category_name = str_replace(['&', '+', '/', '\\', '@', '#', '$', '%', '^', '*', '='], ' ', $category_name);
-            $category_name = html_entity_decode($category_name, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            $category_name = preg_replace('/\s+/', ' ', $category_name);
-            $category_name = trim($category_name);
+            $normalized_category_name = $this->normalizeString($category_name);
 
             if (DEBUG_MODE) {
-                error_log("Normalize edilmiş kategori adı: " . $category_name);
+                error_log("Normalize edilmiş kategori adı: " . $normalized_category_name);
             }
 
-            // Tüm kategorileri tek seferde al
+            // Önce mevcut kategoriyi doğrudan arama yap
+            $search_response = $this->makeRequest('GET', '/products/categories', [
+                'search' => $category_name,
+                'parent' => $parent_id,
+                'per_page' => 10
+            ], true);
+
+            if (!empty($search_response['data'])) {
+                foreach ($search_response['data'] as $category) {
+                    $normalized_found_name = $this->normalizeString($category['name']);
+                    if ($normalized_found_name === $normalized_category_name && 
+                        (int)$category['parent'] === (int)$parent_id) {
+                        if (DEBUG_MODE) {
+                            error_log("Doğrudan aramada kategori bulundu. ID: " . $category['id']);
+                        }
+                        return $category['id'];
+                    }
+                }
+            }
+
+            // Doğrudan bulunamadıysa tüm kategorileri kontrol et
             $all_categories = [];
             $page = 1;
             $per_page = 100;
 
             do {
-                $categories = $this->makeRequest('GET', '/products/categories', [
-                    'per_page' => $per_page,
-                    'page' => $page
-                ]);
-                
-                if (!empty($categories)) {
-                    foreach ($categories as $category) {
-                        $all_categories[] = $category;
-                    }
-                    unset($categories);
+                if (DEBUG_MODE) {
+                    error_log("Sayfa " . $page . " yükleniyor...");
                 }
-                
+
+                $response = $this->makeRequest('GET', '/products/categories', [
+                    'per_page' => $per_page,
+                    'page' => $page,
+                    'orderby' => 'id',
+                    'order' => 'asc'
+                ], true);
+
+                if (empty($response['data'])) {
+                    break;
+                }
+
+                foreach ($response['data'] as $category) {
+                    $normalized_cat_name = $this->normalizeString($category['name']);
+                    $all_categories[$normalized_cat_name] = $category;
+                }
+
+                if (DEBUG_MODE) {
+                    error_log("Sayfa " . $page . " yüklendi. Şu ana kadar toplam " . count($all_categories) . " kategori");
+                }
+
+                // Header'lardan toplam sayfa sayısını al
+                $total_pages = isset($response['headers']) ? 
+                    (int)$this->getHeaderValue($response['headers'], 'X-WP-TotalPages') : 
+                    1;
+
                 $page++;
-            } while (!empty($categories) && count($categories) === $per_page);
+            } while ($page <= $total_pages);
 
             if (DEBUG_MODE) {
                 error_log("Toplam " . count($all_categories) . " kategori yüklendi");
             }
 
-            // Önce tam eşleşme ara
-            foreach ($all_categories as $category) {
-                $cat_name = trim($category['name']);
-                $cat_name = str_replace(['&', '+', '/', '\\', '@', '#', '$', '%', '^', '*', '='], ' ', $cat_name);
-                $cat_name = html_entity_decode($cat_name, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-                $cat_name = preg_replace('/\s+/', ' ', $cat_name);
-                $cat_name = trim($cat_name);
-
-                if (strtolower($cat_name) === strtolower($category_name) && 
-                    (int)$category['parent'] === (int)$parent_id) {
+            // Normalize edilmiş isimle eşleşme ara
+            if (isset($all_categories[$normalized_category_name])) {
+                $existing_category = $all_categories[$normalized_category_name];
+                
+                if ((int)$existing_category['parent'] === (int)$parent_id) {
                     if (DEBUG_MODE) {
-                        error_log("Mevcut kategori bulundu. ID: " . $category['id']);
-                        error_log("Kategori adı: " . $category['name']);
-                        error_log("Üst kategori ID: " . $category['parent']);
+                        error_log("Mevcut kategori bulundu. ID: " . $existing_category['id']);
                     }
-                    
-                    // Eğer resim URL'si varsa ve kategorinin resmi yoksa, resmi güncelle
-                    if (!empty($image_url) && empty($category['image'])) {
-                        try {
-                            $this->makeRequest('PUT', "/products/categories/{$category['id']}", [
-                                'image' => ['src' => $image_url]
-                            ]);
-                            if (DEBUG_MODE) {
-                                error_log("Kategori resmi güncellendi: " . $image_url);
-                            }
-                        } catch (Exception $e) {
-                            error_log("Kategori resmi güncellenirken hata: " . $e->getMessage());
-                        }
-                    }
-                    
-                    return $category['id'];
+                    return $existing_category['id'];
                 }
             }
 
-            // Kategori bulunamadıysa oluşturmayı dene
+            // Kategori bulunamadıysa oluştur
             try {
                 $slug = $this->create_slug($category_name);
                 
@@ -298,7 +309,6 @@ class WooCommerceAPI {
                     'parent' => $parent_id
                 ];
                 
-                // Eğer resim URL'si varsa ekle
                 if (!empty($image_url)) {
                     $category_data['image'] = ['src' => $image_url];
                 }
@@ -306,55 +316,61 @@ class WooCommerceAPI {
                 $new_category = $this->makeRequest('POST', '/products/categories', $category_data);
                 
                 if (DEBUG_MODE) {
-                    error_log("Yeni kategori oluşturuldu:");
-                    error_log("ID: " . $new_category['id']);
-                    error_log("Ad: " . $new_category['name']);
-                    error_log("Slug: " . $new_category['slug']);
-                    error_log("Üst ID: " . $new_category['parent']);
-                    if (!empty($image_url)) {
-                        error_log("Resim URL: " . $image_url);
-                    }
+                    error_log("Yeni kategori oluşturuldu. ID: " . $new_category['id']);
                 }
                 
                 return $new_category['id'];
+                
             } catch (Exception $e) {
-                if (strpos($e->getMessage(), 'already exists') !== false) {
-                    if (DEBUG_MODE) {
-                        error_log("Kategori zaten var hatası alındı, slug ile aranıyor...");
-                    }
+                if (strpos($e->getMessage(), 'term_exists') !== false) {
+                    // Son bir kez daha arama yap
+                    $final_search = $this->makeRequest('GET', '/products/categories', [
+                        'search' => $category_name,
+                        'parent' => $parent_id,
+                        'per_page' => 1
+                    ]);
                     
-                    // Slug ile tekrar ara
-                    foreach ($all_categories as $category) {
-                        if ($category['slug'] === $slug && (int)$category['parent'] === (int)$parent_id) {
-                            if (DEBUG_MODE) {
-                                error_log("Kategori slug ile bulundu. ID: " . $category['id']);
-                            }
-                            
-                            // Eğer resim URL'si varsa ve kategorinin resmi yoksa, resmi güncelle
-                            if (!empty($image_url) && empty($category['image'])) {
-                                try {
-                                    $this->makeRequest('PUT', "/products/categories/{$category['id']}", [
-                                        'image' => ['src' => $image_url]
-                                    ]);
-                                    if (DEBUG_MODE) {
-                                        error_log("Kategori resmi güncellendi: " . $image_url);
-                                    }
-                                } catch (Exception $e) {
-                                    error_log("Kategori resmi güncellenirken hata: " . $e->getMessage());
-                                }
-                            }
-                            
-                            return $category['id'];
+                    if (!empty($final_search[0])) {
+                        if (DEBUG_MODE) {
+                            error_log("Kategori son kontrolde bulundu. ID: " . $final_search[0]['id']);
                         }
+                        return $final_search[0]['id'];
                     }
                 }
-                
-                throw new Exception("Kategori oluşturulamadı ve mevcut kategori bulunamadı: " . $e->getMessage());
+                throw new Exception("Kategori işlemi başarısız: " . $e->getMessage());
             }
         } catch (Exception $e) {
             error_log("Kategori işlemi hatası: " . $e->getMessage());
             throw $e;
         }
+    }
+    
+    /**
+     * String normalize etme yardımcı fonksiyonu
+     */
+    private function normalizeString($str) {
+        $str = trim($str);
+        $str = html_entity_decode($str, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $str = str_replace(['&', '+', '/', '\\', '@', '#', '$', '%', '^', '*', '='], ' ', $str);
+        
+        // Türkçe karakterleri değiştir
+        $tr = array('ş','Ş','ı','İ','ğ','Ğ','ü','Ü','ö','Ö','ç','Ç');
+        $eng = array('s','s','i','i','g','g','u','u','o','o','c','c');
+        $str = str_replace($tr, $eng, $str);
+        
+        $str = mb_strtolower($str, 'UTF-8');
+        $str = preg_replace('/\s+/', ' ', $str);
+        return trim($str);
+    }
+    
+    /**
+     * Header değerini alma yardımcı fonksiyonu
+     */
+    private function getHeaderValue($headers, $key) {
+        if (preg_match("/$key: (\d+)/i", $headers, $matches)) {
+            return (int)$matches[1];
+        }
+        return 0;
     }
     
     /**
@@ -756,6 +772,11 @@ class WooCommerceAPI {
         
         $ch = curl_init();
         
+        // URL'de query string varsa, & ile ekle, yoksa ? ile başla
+        if ($data !== null && $method === 'GET') {
+            $url .= (strpos($url, '?') !== false ? '&' : '?') . http_build_query($data);
+        }
+        
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
@@ -775,7 +796,7 @@ class WooCommerceAPI {
             curl_setopt($ch, CURLOPT_HEADER, true);
         }
         
-        if ($data !== null) {
+        if ($data !== null && $method !== 'GET') {
             $json_data = json_encode($data, JSON_UNESCAPED_UNICODE);
             curl_setopt($ch, CURLOPT_POSTFIELDS, $json_data);
             
@@ -786,17 +807,13 @@ class WooCommerceAPI {
         
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlInfo = curl_getinfo($ch);
         
         if (DEBUG_MODE) {
             error_log("HTTP Durum Kodu: " . $httpCode);
-            error_log("CURL Bilgileri: " . print_r($curlInfo, true));
-            error_log("API Yanıtı: " . $response);
         }
         
         if (curl_errno($ch)) {
             $error = curl_error($ch);
-            error_log("CURL Hatası: " . $error);
             curl_close($ch);
             throw new Exception("CURL Hatası: " . $error);
         }
@@ -807,21 +824,19 @@ class WooCommerceAPI {
             $body = substr($response, $headerSize);
             curl_close($ch);
             
-            // Header'lardan toplam sayıyı al
-            preg_match('/X-WP-Total: (\d+)/i', $headers, $matches);
-            $total = isset($matches[1]) ? (int)$matches[1] : 0;
-            
             $decoded = json_decode($body, true);
             
             if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
-                error_log("JSON Decode Hatası: " . json_last_error_msg());
-                error_log("Ham Yanıt: " . $body);
                 throw new Exception("API yanıtı JSON formatında değil");
+            }
+            
+            if ($httpCode >= 400) {
+                error_log("API Hata Yanıtı: " . print_r($decoded, true));
+                throw new Exception("API Hatası: " . ($decoded['message'] ?? 'Bilinmeyen hata'));
             }
             
             return [
                 'data' => $decoded,
-                'total' => $total,
                 'headers' => $headers
             ];
         }
@@ -831,19 +846,12 @@ class WooCommerceAPI {
         $decoded = json_decode($response, true);
         
         if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
-            error_log("JSON Decode Hatası: " . json_last_error_msg());
-            error_log("Ham Yanıt: " . $response);
             throw new Exception("API yanıtı JSON formatında değil");
         }
         
         if ($httpCode >= 400) {
             error_log("API Hata Yanıtı: " . print_r($decoded, true));
             throw new Exception("API Hatası: " . ($decoded['message'] ?? 'Bilinmeyen hata'));
-        }
-        
-        if (DEBUG_MODE) {
-            error_log("İşlem Başarılı - Yanıt: " . print_r($decoded, true));
-            error_log("========= API İSTEĞİ TAMAMLANDI =========\n");
         }
         
         return $decoded;
